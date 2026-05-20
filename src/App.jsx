@@ -22,7 +22,8 @@ import {
   Plus,
   Wifi,
   FileText,
-  ShieldAlert
+  ShieldAlert,
+  Settings
 } from "lucide-react";
 import "./App.css";
 
@@ -37,66 +38,80 @@ const SEED_TOKENS = [
 ];
 
 function App() {
-  // Simple SPA state-router using browser history
-  const [isAdmin, setIsAdmin] = useState(window.location.pathname === "/admin");
+  // App structure state: 'session' (Start Screen) | 'hub' (Session Hub with tabs)
+  const [step, setStep] = useState(
+    window.location.pathname === "/admin" ? "hub" : "session"
+  );
+  // Active Tab inside Session Hub: 'input' (Mobile Wizard) | 'manage' (Desktop Overview/Admin)
+  const [activeTab, setActiveTab] = useState(
+    window.location.pathname === "/admin" ? "manage" : "input"
+  );
 
-  // Shared state
+  // Connection & session parameters
   const [sessionId, setSessionId] = useState("mobus-001");
-  const [tokensData, setTokensData] = useState({}); // Real-time document values from Firestore
+  const [tokensData, setTokensData] = useState({}); // Real-time values synced from Firestore
   const [dbError, setDbError] = useState(null);
 
-  // Phone flow state
-  const [userStep, setUserStep] = useState("session"); // 'session' | 'idea' | 'token' | 'submitting' | 'success'
+  // --- TAB A: NEW IDEA WIZARD STATE ---
+  const [userWizardStep, setUserWizardStep] = useState("idea"); // 'idea' | 'token' | 'submitting' | 'success'
   const [ideaTitle, setIdeaTitle] = useState("");
   const [ideaDescription, setIdeaDescription] = useState("");
   const [selectedToken, setSelectedToken] = useState("");
 
-  // Admin page state
-  const [tempSessionId, setTempSessionId] = useState("mobus-001");
+  // --- TAB B: ADMIN / MANAGE STATE ---
   const [adminError, setAdminError] = useState(null);
   const [adminSuccess, setAdminSuccess] = useState(null);
-  const [isEditing, setIsEditing] = useState(false); // true if editing existing
-  
-  // Admin form state
+  const [isEditing, setIsEditing] = useState(false);
   const [formTokenId, setFormTokenId] = useState("seed-01");
   const [formTitle, setFormTitle] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formStatus, setFormStatus] = useState("active");
 
-  // Sync route state with history popstate (browser back/forward)
+  // Sync route and tabs with browser back/forward buttons (popstate)
   useEffect(() => {
     const handleLocationChange = () => {
-      setIsAdmin(window.location.pathname === "/admin");
+      const isAdminPath = window.location.pathname === "/admin";
+      if (isAdminPath) {
+        setStep("hub");
+        setActiveTab("manage");
+      } else {
+        // If they navigate back to /, we switch to input tab
+        setActiveTab("input");
+      }
     };
     window.addEventListener("popstate", handleLocationChange);
     return () => window.removeEventListener("popstate", handleLocationChange);
   }, []);
 
-  // Update HTML body class dynamically for responsive layout adjustment
+  // Update layout constraints dynamically based on active view mode
   useEffect(() => {
-    if (isAdmin) {
+    if (step === "hub" && activeTab === "manage") {
       document.body.classList.add("admin-route");
     } else {
       document.body.classList.remove("admin-route");
     }
-  }, [isAdmin]);
+  }, [step, activeTab]);
 
-  // Navigate utility
-  const navigateTo = (path) => {
-    window.history.pushState({}, "", path);
-    setIsAdmin(path === "/admin");
+  // Tab change handler with URL history tracking
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
     setAdminSuccess(null);
     setAdminError(null);
+    if (tab === "manage") {
+      window.history.pushState({}, "", "/admin");
+    } else {
+      window.history.pushState({}, "", "/");
+    }
   };
 
-  // Real-time snapshot listener on the current session tokens
+  // Real-time snapshot synchronization with Firestore tokens collection
   useEffect(() => {
     if (!isConfigured || !sessionId) return;
 
     setDbError(null);
     const tokensCollectionRef = collection(db, "sessions", sessionId, "tokens");
     
-    // Listen to changes in real-time
+    // Bind snapshot listener
     const unsubscribe = onSnapshot(
       tokensCollectionRef, 
       (snapshot) => {
@@ -107,16 +122,17 @@ function App() {
         setTokensData(data);
       },
       (err) => {
-        console.error("Firestore sync error:", err);
+        console.error("Firestore synchronisation error:", err);
         setDbError(`Fout bij laden van database updates: ${err.message}`);
       }
     );
 
     return () => unsubscribe();
-  }, [sessionId]);
+  }, [sessionId, isConfigured]);
 
-  // Check helper functions
+  // Helpers to evaluate token occupancy
   const isTokenOccupied = (tokenId) => {
+    // If a document exists, the token is occupied
     return !!tokensData[tokenId];
   };
 
@@ -125,15 +141,15 @@ function App() {
   };
 
   // ==========================================
-  // PHONE FLOW OPERATIONS
+  // MOBILE USER FLOW (TAB A)
   // ==========================================
   const handleUserSubmit = async () => {
     if (!isConfigured) {
-      setDbError("Firebase is niet geconfigureerd. Voeg je credentials toe.");
+      setDbError("Firebase is niet geconfigureerd. Voer je credentials in.");
       return;
     }
 
-    setUserStep("submitting");
+    setUserWizardStep("submitting");
     setDbError(null);
 
     try {
@@ -153,11 +169,11 @@ function App() {
       };
 
       await setDoc(docRef, payload, { merge: true });
-      setUserStep("success");
+      setUserWizardStep("success");
     } catch (err) {
       console.error("User save failed:", err);
       setDbError(`Opslaan mislukt: ${err.message}`);
-      setUserStep("token");
+      setUserWizardStep("token");
     }
   };
 
@@ -166,19 +182,24 @@ function App() {
     setIdeaDescription("");
     setSelectedToken("");
     setDbError(null);
-    setUserStep("idea");
+    setUserWizardStep("idea");
+  };
+
+  const handleGoToManage = () => {
+    // Reset the input wizard state
+    setIdeaTitle("");
+    setIdeaDescription("");
+    setSelectedToken("");
+    setDbError(null);
+    setUserWizardStep("idea");
+    
+    // Switch to the management view
+    handleTabChange("manage");
   };
 
   // ==========================================
-  // ADMIN ENVIRONMENT OPERATIONS
+  // MANAGEMENT FLOW (TAB B)
   // ==========================================
-  const handleLoadSession = () => {
-    if (!tempSessionId.trim()) return;
-    setSessionId(tempSessionId.trim());
-    setAdminSuccess(`Sessie '${tempSessionId}' geladen.`);
-    setTimeout(() => setAdminSuccess(null), 3000);
-  };
-
   const handleEditClick = (token) => {
     setIsEditing(true);
     setFormTokenId(token.tokenId);
@@ -190,7 +211,6 @@ function App() {
   };
 
   const handleCancelEdit = () => {
-    setIsEditing(false);
     resetAdminForm();
   };
 
@@ -217,7 +237,6 @@ function App() {
 
     try {
       const docRef = doc(db, "sessions", sessionId, "tokens", formTokenId);
-      
       const existingDoc = tokensData[formTokenId];
       
       const payload = {
@@ -229,7 +248,7 @@ function App() {
         updatedAt: serverTimestamp()
       };
 
-      // Set creation date if it's a new entry
+      // Set baseline values if creating a brand new record
       if (!existingDoc || !isEditing) {
         payload.createdAt = serverTimestamp();
         payload.cluster = null;
@@ -240,8 +259,8 @@ function App() {
       await setDoc(docRef, payload, { merge: true });
       setAdminSuccess(
         isEditing 
-          ? `Idee op ${formTokenId} succesvol bijgewerkt.` 
-          : `Nieuw idee op ${formTokenId} succesvol opgeslagen.`
+          ? `Idee op ${formTokenId.toUpperCase()} succesvol bijgewerkt.` 
+          : `Nieuw idee op ${formTokenId.toUpperCase()} succesvol gekoppeld.`
       );
       resetAdminForm();
     } catch (err) {
@@ -252,520 +271,506 @@ function App() {
 
   const handlePermanentDelete = async (tokenId) => {
     if (!isConfigured) return;
-    if (!window.confirm(`Weet je zeker dat je het idee op ${tokenId} permanent wilt verwijderen uit de database?`)) {
+    if (!window.confirm(`Weet je zeker dat je het idee op ${tokenId.toUpperCase()} permanent wilt verwijderen uit de database?`)) {
       return;
     }
     try {
       setAdminError(null);
       const docRef = doc(db, "sessions", sessionId, "tokens", tokenId);
       await deleteDoc(docRef);
-      setAdminSuccess(`Token ${tokenId} permanent verwijderd.`);
+      setAdminSuccess(`Token ${tokenId.toUpperCase()} permanent verwijderd. Dit seed is weer vrij.`);
     } catch (err) {
       setAdminError(`Verwijderen mislukt: ${err.message}`);
     }
   };
 
+  // Exit active session and return to Start Screen
+  const handleExitSession = () => {
+    setSessionId("mobus-001");
+    handleAddAnotherIdea();
+    setStep("session");
+    window.history.pushState({}, "", "/");
+  };
+
   return (
     <div className="app-container">
-      {/* HEADER SECTION */}
+      {/* HEADER */}
       <header className="app-header">
         <div className="logo-section">
-          <h1 className="app-title" onClick={() => navigateTo("/")} style={{ cursor: "pointer" }}>
+          <h1 className="app-title" onClick={handleExitSession} style={{ cursor: "pointer" }} title="Terug naar startscherm">
             <Sparkles size={20} color="#6366f1" />
             MOBUS
           </h1>
-          <span className="app-subtitle">
-            {isAdmin ? "Beheeromgeving (Admin)" : "Seed Input Screen"}
-          </span>
+          <span className="app-subtitle">Interactive Session Hub</span>
         </div>
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-          {isAdmin ? (
-            <button className="reset-session-btn" onClick={() => navigateTo("/")} style={{ textDecoration: "none", fontWeight: "600", color: "var(--accent)" }}>
-              Gebruikersflow ➔
-            </button>
-          ) : (
-            <button className="reset-session-btn" onClick={() => navigateTo("/admin")} style={{ textDecoration: "none", fontWeight: "600", color: "var(--accent)" }}>
-              Admin ➔
-            </button>
-          )}
-          {(!isAdmin || userStep !== "session") && (
-            <div className="session-badge">{sessionId}</div>
-          )}
-        </div>
+        {step === "hub" && (
+          <div className="session-badge">{sessionId}</div>
+        )}
       </header>
 
-      {/* RENDER ADMIN VIEW */}
-      {isAdmin ? (
-        <main className="admin-layout">
-          {/* Admin Left Column: Token Overview & List */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-            <div className="card">
-              <h2 className="card-title">Sessie Beheer</h2>
-              <div className="admin-header-actions">
-                <div className="input-group" style={{ flex: 1, minWidth: "200px" }}>
-                  <label htmlFor="admin-session-input" className="input-label">Sessiecode</label>
-                  <input
-                    id="admin-session-input"
-                    type="text"
-                    className="text-input"
-                    value={tempSessionId}
-                    onChange={(e) => setTempSessionId(e.target.value)}
-                    placeholder="mobus-001"
-                  />
+      {/* START SCREEN: ENTER SESSION CODE */}
+      {step === "session" && (
+        <main className="screen-container">
+          <div className="card">
+            <h2 className="card-title">MOBUS Seed Input</h2>
+            <p className="card-description">
+              Voer de actieve sessiecode in om deel te nemen en ideeën toe te voegen of te beheren.
+            </p>
+
+            {!isConfigured && (
+              <div className="error-banner">
+                <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+                <div>
+                  <div className="error-title">Firebase Config Alert</div>
+                  Firebase is nog niet geconfigureerd. Je kan de UI testen, maar database opslag is inactief. Configureer `.env` of `src/firebase.js`.
                 </div>
-                <button 
-                  className="btn btn-primary" 
-                  onClick={handleLoadSession}
-                  style={{ width: "auto", alignSelf: "flex-end" }}
-                >
-                  Sessie laden
-                </button>
               </div>
+            )}
 
-              {adminSuccess && (
-                <div className="error-banner" style={{ backgroundColor: "var(--success-glow)", borderColor: "var(--success)" }}>
-                  <CheckCircle2 size={18} color="var(--success)" style={{ flexShrink: 0 }} />
-                  <span style={{ color: "var(--text-primary)" }}>{adminSuccess}</span>
-                </div>
-              )}
-              {adminError && (
-                <div className="error-banner">
-                  <AlertTriangle size={18} style={{ flexShrink: 0 }} />
-                  <div>
-                    <div className="error-title">Fout</div>
-                    {adminError}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="card">
-              <h2 className="card-title">Token Status Overzicht</h2>
-              <p className="card-description">
-                Hieronder zie je real-time welke van de 6 fysieke tokens bezet of vrij zijn in de sessie <strong>{sessionId}</strong>.
-              </p>
-
-              <div className="admin-card-list">
-                {SEED_TOKENS.map((token) => {
-                  const data = tokensData[token.id];
-                  const occupied = isTokenOccupied(token.id);
-
-                  return (
-                    <div key={token.id} className="admin-token-card">
-                      <div className="admin-token-header">
-                        <div className="admin-token-title-row">
-                          <span className={`admin-token-id-badge ${token.class}`}>
-                            {token.name}
-                          </span>
-                          {occupied ? (
-                            <span className="occ-pill occ-occupied">Bezet</span>
-                          ) : (
-                            <span className="occ-pill occ-free">Vrij</span>
-                          )}
-                        </div>
-                        {occupied && (
-                          <span className={`status-pill status-${data.status}`}>
-                            {data.status}
-                          </span>
-                        )}
-                      </div>
-
-                      {occupied ? (
-                        <>
-                          <div>
-                            <div className="admin-idea-title">{data.title}</div>
-                            {data.description && (
-                              <p className="admin-idea-desc">{data.description}</p>
-                            )}
-                          </div>
-                          <div className="admin-token-meta">
-                            <span>Bron: <strong>{data.source || "onbekend"}</strong></span>
-                            {data.updatedAt && (
-                              <span>Bijgewerkt: {new Date(data.updatedAt?.seconds * 1000).toLocaleTimeString()}</span>
-                            )}
-                          </div>
-                          <div className="admin-actions">
-                            <button 
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => handleEditClick(data)}
-                            >
-                              <Edit size={14} />
-                              Bewerken
-                            </button>
-                            <button 
-                              className="btn btn-danger btn-sm"
-                              onClick={() => handlePermanentDelete(token.id)}
-                              title="Permanent verwijderen uit database"
-                            >
-                              <Trash2 size={14} />
-                              Verwijder
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span className="card-description" style={{ fontStyle: "italic" }}>Geen gekoppeld idee</span>
-                          <button 
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => {
-                              setIsEditing(false);
-                              setFormTokenId(token.id);
-                              resetAdminForm();
-                            }}
-                          >
-                            <Plus size={14} />
-                            Koppel Idee
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+            <div className="input-group">
+              <label htmlFor="session-id-input" className="input-label">Sessiecode</label>
+              <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                <KeyRound size={18} color="#64748b" style={{ position: "absolute", left: "12px" }} />
+                <input
+                  id="session-id-input"
+                  type="text"
+                  className="text-input"
+                  style={{ width: "100%", paddingLeft: "2.5rem" }}
+                  value={sessionId}
+                  onChange={(e) => setSessionId(e.target.value)}
+                  placeholder="mobus-001"
+                />
               </div>
             </div>
-          </div>
 
-          {/* Admin Right Column: Form to Add/Edit */}
-          <div className="admin-form-container">
-            <div className="card">
-              <h2 className="card-title">
-                {isEditing ? `Bewerken ${formTokenId.toUpperCase()}` : "Idee Handmatig Koppelen"}
-              </h2>
-              <p className="card-description">
-                {isEditing 
-                  ? "Pas de velden aan en sla de wijzigingen op in Firestore." 
-                  : "Kies een token en voeg direct een idee toe via het beheerpaneel."}
-              </p>
-
-              <form onSubmit={handleAdminSave} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-                <div className="input-group">
-                  <label htmlFor="form-token-select" className="input-label">Selecteer Token</label>
-                  <select
-                    id="form-token-select"
-                    className="select-input"
-                    value={formTokenId}
-                    onChange={(e) => setFormTokenId(e.target.value)}
-                    disabled={isEditing}
-                  >
-                    {SEED_TOKENS.map(t => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} {isTokenOccupied(t.id) && !isEditing ? "(BEZET)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="input-group">
-                  <label htmlFor="form-title" className="input-label">Idee Titel</label>
-                  <input
-                    id="form-title"
-                    type="text"
-                    className="text-input"
-                    value={formTitle}
-                    onChange={(e) => setFormTitle(e.target.value)}
-                    placeholder="Bijv. Smart whiteboard link"
-                    required
-                  />
-                </div>
-
-                <div className="input-group">
-                  <label htmlFor="form-desc" className="input-label">Beschrijving (Context)</label>
-                  <textarea
-                    id="form-desc"
-                    className="text-input textarea-input"
-                    style={{ minHeight: "100px" }}
-                    value={formDescription}
-                    onChange={(e) => setFormDescription(e.target.value)}
-                    placeholder="Voeg optioneel details of extra context toe..."
-                  />
-                </div>
-
-                <div className="input-group">
-                  <label htmlFor="form-status" className="input-label">Status</label>
-                  <select
-                    id="form-status"
-                    className="select-input"
-                    value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value)}
-                  >
-                    <option value="draft">draft</option>
-                    <option value="active">active</option>
-                    <option value="clustered">clustered</option>
-                    <option value="selected">selected</option>
-                  </select>
-                </div>
-
-                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-                  <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
-                    <Database size={18} />
-                    Opslaan
-                  </button>
-                  {isEditing && (
-                    <button 
-                      type="button" 
-                      className="btn btn-secondary" 
-                      onClick={handleCancelEdit}
-                      style={{ width: "auto" }}
-                    >
-                      Annuleer
-                    </button>
-                  )}
-                </div>
-              </form>
-            </div>
+            <button
+              id="start-session-btn"
+              className="btn btn-primary"
+              onClick={() => {
+                setStep("hub");
+                setActiveTab("input");
+                window.history.pushState({}, "", "/");
+              }}
+              disabled={!sessionId.trim()}
+            >
+              Start sessie
+              <ArrowRight size={18} />
+            </button>
           </div>
         </main>
-      ) : (
-        /* RENDER MOBILE USER FLOW */
-        <main className="screen-container">
+      )}
+
+      {/* SESSION HUB CONTAINER */}
+      {step === "hub" && (
+        <>
+          {/* TAB BAR NAVIGATION */}
+          <nav className="tab-navigation">
+            <button
+              className={`tab-btn ${activeTab === "input" ? "active" : ""}`}
+              onClick={() => handleTabChange("input")}
+            >
+              <Plus size={16} className="tab-btn-icon" />
+              Nieuw Idee
+            </button>
+            <button
+              className={`tab-btn ${activeTab === "manage" ? "active" : ""}`}
+              onClick={() => handleTabChange("manage")}
+            >
+              <Settings size={16} className="tab-btn-icon" />
+              Beheer & Overzicht
+            </button>
+          </nav>
+
           {dbError && (
-            <div className="error-banner" style={{ marginBottom: "1rem" }}>
+            <div className="error-banner" style={{ marginBottom: "1.5rem" }}>
               <AlertTriangle size={18} style={{ flexShrink: 0 }} />
               <div>
-                <div className="error-title">Database melding</div>
+                <div className="error-title">Database fout</div>
                 {dbError}
               </div>
             </div>
           )}
 
-          {/* Step 1: Session Setup Screen */}
-          {userStep === "session" && (
-            <div className="card">
-              <h2 className="card-title">MOBUS Seed Input</h2>
-              <p className="card-description">
-                Vul de sessiecode in die getoond wordt op het hoofdscherm om de sessie te starten.
-              </p>
+          {/* TAB CONTENT: A. NEW IDEA WIZARD (MOBILE FLOW) */}
+          {activeTab === "input" && (
+            <main className="screen-container">
+              {/* Wizard Step 1: Input Form */}
+              {userWizardStep === "idea" && (
+                <div className="card">
+                  <h2 className="card-title">Wat wil je inbrengen?</h2>
+                  <p className="card-description">
+                    Voer een korte titel in en leg kort de context of betekenis van je idee uit.
+                  </p>
 
-              <div className="input-group">
-                <label htmlFor="session-id-input" className="input-label">Sessiecode</label>
-                <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                  <KeyRound size={18} color="#64748b" style={{ position: "absolute", left: "12px" }} />
-                  <input
-                    id="session-id-input"
-                    type="text"
-                    className="text-input"
-                    style={{ width: "100%", paddingLeft: "2.5rem" }}
-                    value={sessionId}
-                    onChange={(e) => setSessionId(e.target.value)}
-                    placeholder="mobus-001"
-                  />
+                  <div className="input-group">
+                    <label htmlFor="idea-title" className="input-label">Titel van idee</label>
+                    <input
+                      id="idea-title"
+                      type="text"
+                      className="text-input"
+                      value={ideaTitle}
+                      onChange={(e) => setIdeaTitle(e.target.value)}
+                      placeholder="Bijv. Robot als creatieve teamgenoot"
+                    />
+                  </div>
+
+                  <div className="input-group">
+                    <label htmlFor="idea-desc" className="input-label">Beschrijving / Context</label>
+                    <textarea
+                      id="idea-desc"
+                      className="text-input textarea-input"
+                      style={{ minHeight: "100px" }}
+                      value={ideaDescription}
+                      onChange={(e) => setIdeaDescription(e.target.value)}
+                      placeholder="Voeg eventueel extra context of voorbeelden toe..."
+                    />
+                  </div>
+
+                  <button
+                    id="link-to-token-btn"
+                    className="btn btn-primary"
+                    onClick={() => setUserWizardStep("token")}
+                    disabled={!ideaTitle.trim()}
+                  >
+                    Koppel aan seed token
+                    <ArrowRight size={18} />
+                  </button>
+                </div>
+              )}
+
+              {/* Wizard Step 2: Select Token */}
+              {userWizardStep === "token" && (
+                <div className="card">
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <button 
+                      className="btn btn-secondary" 
+                      style={{ width: "auto", padding: "0.5rem" }}
+                      onClick={() => setUserWizardStep("idea")}
+                    >
+                      <ArrowLeft size={16} />
+                    </button>
+                    <h2 className="card-title">Kies seed token</h2>
+                  </div>
+
+                  <p className="card-description">
+                    Selecteer een vrije token om je idee aan te koppelen. Bezette tokens zijn rood en disabled.
+                  </p>
+
+                  <div className="token-grid">
+                    {SEED_TOKENS.map((token) => {
+                      const occupied = isTokenOccupied(token.id);
+                      const isSelected = selectedToken === token.id;
+
+                      return (
+                        <button
+                          key={token.id}
+                          id={`token-btn-${token.id}`}
+                          className={`token-button ${isSelected ? "selected" : ""} ${occupied ? "occupied" : ""}`}
+                          onClick={() => !occupied && setSelectedToken(token.id)}
+                          disabled={occupied}
+                          type="button"
+                        >
+                          <div className={`token-indicator ${token.class}`} />
+                          <span className="token-name">{token.name}</span>
+                          
+                          {occupied ? (
+                            <span className="token-status-label token-status-occupied">Bezet</span>
+                          ) : (
+                            <span className="token-status-label token-status-free">Vrij</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    id="send-to-table-btn"
+                    className="btn btn-primary"
+                    onClick={handleUserSubmit}
+                    disabled={!selectedToken}
+                  >
+                    <Database size={18} />
+                    Verstuur naar tafel
+                  </button>
+                </div>
+              )}
+
+              {/* Wizard Step 3: Loading Submitting */}
+              {userWizardStep === "submitting" && (
+                <div className="card">
+                  <div className="loading-container">
+                    <div className="spinner" />
+                    <span className="loading-text">Idee wordt gekoppeld aan {selectedToken.toUpperCase()}...</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Wizard Step 4: Success Confirmation */}
+              {userWizardStep === "success" && (
+                <div className="card success-card">
+                  <div className="success-icon-wrapper">
+                    <CheckCircle2 size={36} />
+                  </div>
+                  
+                  <h2 className="card-title">Seed geactiveerd!</h2>
+                  
+                  <div className="success-badge">
+                    {selectedToken.toUpperCase()}
+                  </div>
+
+                  <div className="success-instruction">
+                    Pak nu de fysieke seed token en leg hem op de interactieve tafel.
+                  </div>
+
+                  <div style={{ width: "100%", margin: "0.5rem 0 1.5rem 0", textAlign: "left" }}>
+                    <div className="input-label" style={{ marginBottom: "0.25rem" }}>Gekoppeld idee:</div>
+                    <div style={{ fontWeight: "700", fontSize: "1rem", color: "var(--text-primary)" }}>{ideaTitle}</div>
+                    {ideaDescription && (
+                      <p className="idea-preview" style={{ marginTop: "0.25rem", fontStyle: "normal" }}>
+                        {ideaDescription}
+                      </p>
+                    )}
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", width: "100%" }}>
+                    <button
+                      id="add-another-idea-btn"
+                      className="btn btn-primary"
+                      onClick={handleAddAnotherIdea}
+                    >
+                      <RefreshCw size={18} />
+                      Nog een idee toevoegen
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={handleGoToManage}
+                    >
+                      <Settings size={18} />
+                      Ga naar ideeënbeheer
+                    </button>
+                  </div>
+                </div>
+              )}
+            </main>
+          )}
+
+          {/* TAB CONTENT: B. MANAGEMENT / ADMIN DASHBOARD */}
+          {activeTab === "manage" && (
+            <main className="admin-layout">
+              {/* Left Column: Token List */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div className="card" style={{ paddingBottom: "1.25rem" }}>
+                  <h2 className="card-title">Token Status Overzicht</h2>
+                  <p className="card-description">
+                    Hieronder zie je real-time welke van de 6 fysieke tokens in sessie <strong>{sessionId}</strong> bezet of vrij zijn.
+                  </p>
+                  
+                  {adminSuccess && (
+                    <div className="error-banner" style={{ backgroundColor: "var(--success-glow)", borderColor: "var(--success)", marginTop: "1rem" }}>
+                      <CheckCircle2 size={18} color="var(--success)" style={{ flexShrink: 0 }} />
+                      <span style={{ color: "var(--text-primary)" }}>{adminSuccess}</span>
+                    </div>
+                  )}
+                  {adminError && (
+                    <div className="error-banner" style={{ marginTop: "1rem" }}>
+                      <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+                      <div>
+                        <div className="error-title">Fout</div>
+                        {adminError}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="admin-card-list">
+                  {SEED_TOKENS.map((token) => {
+                    const data = tokensData[token.id];
+                    const occupied = isTokenOccupied(token.id);
+
+                    return (
+                      <div key={token.id} className="admin-token-card">
+                        <div className="admin-token-header">
+                          <div className="admin-token-title-row">
+                            <span className={`admin-token-id-badge ${token.class}`}>
+                              {token.name}
+                            </span>
+                            {occupied ? (
+                              <span className="occ-pill occ-occupied">Bezet</span>
+                            ) : (
+                              <span className="occ-pill occ-free">Vrij</span>
+                            )}
+                          </div>
+                          {occupied && (
+                            <span className={`status-pill status-${data.status}`}>
+                              {data.status}
+                            </span>
+                          )}
+                        </div>
+
+                        {occupied ? (
+                          <>
+                            <div>
+                              <div className="admin-idea-title">{data.title}</div>
+                              {data.description && (
+                                <p className="admin-idea-desc">{data.description}</p>
+                              )}
+                            </div>
+                            <div className="admin-token-meta">
+                              <span>Bron: <strong>{data.source || "onbekend"}</strong></span>
+                              {data.updatedAt && (
+                                <span>Bijgewerkt: {new Date(data.updatedAt?.seconds * 1000).toLocaleTimeString()}</span>
+                              )}
+                            </div>
+                            <div className="admin-actions">
+                              <button 
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => handleEditClick(data)}
+                              >
+                                <Edit size={14} />
+                                Bewerken
+                              </button>
+                              <button 
+                                className="btn btn-danger btn-sm"
+                                onClick={() => handlePermanentDelete(token.id)}
+                                title="Permanent verwijderen uit database"
+                              >
+                                <Trash2 size={14} />
+                                Verwijder
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span className="card-description" style={{ fontStyle: "italic" }}>Geen gekoppeld idee</span>
+                            <button 
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => {
+                                setIsEditing(false);
+                                setFormTokenId(token.id);
+                                resetAdminForm();
+                              }}
+                            >
+                              <Plus size={14} />
+                              Koppel Idee
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
-              <button
-                id="start-session-btn"
-                className="btn btn-primary"
-                onClick={() => setUserStep("idea")}
-                disabled={!sessionId.trim()}
-              >
-                Start sessie
-                <ArrowRight size={18} />
-              </button>
-            </div>
-          )}
-
-          {/* Step 2: Idea Input Screen */}
-          {userStep === "idea" && (
-            <div className="card">
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ width: "auto", padding: "0.5rem" }}
-                  onClick={() => setUserStep("session")}
-                >
-                  <ArrowLeft size={16} />
-                </button>
-                <h2 className="card-title">Wat wil je inbrengen?</h2>
-              </div>
-              
-              <p className="card-description">
-                Voer een korte titel in en beschrijf je idee. Dit wordt gekoppeld aan de fysieke token.
-              </p>
-
-              <div className="input-group">
-                <label htmlFor="idea-title" className="input-label">Titel van idee</label>
-                <input
-                  id="idea-title"
-                  type="text"
-                  className="text-input"
-                  value={ideaTitle}
-                  onChange={(e) => setIdeaTitle(e.target.value)}
-                  placeholder="Bijv. Robot als creatieve teamgenoot"
-                />
-              </div>
-
-              <div className="input-group">
-                <label htmlFor="idea-desc" className="input-label">Beschrijving / Context</label>
-                <textarea
-                  id="idea-desc"
-                  className="text-input textarea-input"
-                  style={{ minHeight: "100px" }}
-                  value={ideaDescription}
-                  onChange={(e) => setIdeaDescription(e.target.value)}
-                  placeholder="Voeg eventueel context, uitleg of voorbeelden toe..."
-                />
-              </div>
-
-              <button
-                id="link-to-token-btn"
-                className="btn btn-primary"
-                onClick={() => setUserStep("token")}
-                disabled={!ideaTitle.trim()}
-              >
-                Koppel aan seed token
-                <ArrowRight size={18} />
-              </button>
-            </div>
-          )}
-
-          {/* Step 3: Token Selection Screen */}
-          {userStep === "token" && (
-            <div className="card">
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ width: "auto", padding: "0.5rem" }}
-                  onClick={() => setUserStep("idea")}
-                >
-                  <ArrowLeft size={16} />
-                </button>
-                <h2 className="card-title">Kies seed token</h2>
-              </div>
-
-              <p className="card-description">
-                Selecteer een vrije token. Bezette tokens zijn rood en kunnen niet geselecteerd worden.
-              </p>
-
-              <div className="token-grid">
-                {SEED_TOKENS.map((token) => {
-                  const occupied = isTokenOccupied(token.id);
-                  const isSelected = selectedToken === token.id;
-
-                  return (
-                    <button
-                      key={token.id}
-                      id={`token-btn-${token.id}`}
-                      className={`token-button ${isSelected ? "selected" : ""} ${occupied ? "occupied" : ""}`}
-                      onClick={() => !occupied && setSelectedToken(token.id)}
-                      disabled={occupied}
-                      type="button"
-                    >
-                      <div className={`token-indicator ${token.class}`} />
-                      <span className="token-name">{token.name}</span>
-                      
-                      {occupied ? (
-                        <span className="token-status-label token-status-occupied">Bezet</span>
-                      ) : (
-                        <span className="token-status-label token-status-free">Vrij</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <button
-                id="send-to-table-btn"
-                className="btn btn-primary"
-                onClick={handleUserSubmit}
-                disabled={!selectedToken}
-              >
-                <Database size={18} />
-                Verstuur naar tafel
-              </button>
-            </div>
-          )}
-
-          {/* Step 4: Submitting Load state */}
-          {userStep === "submitting" && (
-            <div className="card">
-              <div className="loading-container">
-                <div className="spinner" />
-                <span className="loading-text">Idee wordt gekoppeld aan {selectedToken}...</span>
-              </div>
-            </div>
-          )}
-
-          {/* Step 5: Success Confirmation Screen */}
-          {userStep === "success" && (
-            <div className="card success-card">
-              <div className="success-icon-wrapper">
-                <CheckCircle2 size={36} />
-              </div>
-              
-              <h2 className="card-title">Seed geactiveerd!</h2>
-              
-              <div className="success-badge">
-                {selectedToken.toUpperCase()}
-              </div>
-
-              <div className="success-instruction">
-                Pak nu de fysieke seed token en leg hem op de interactieve tafel.
-              </div>
-
-              <div style={{ width: "100%", margin: "0.5rem 0 1rem 0", textAlign: "left" }}>
-                <div className="input-label" style={{ marginBottom: "0.25rem" }}>Gekoppeld idee:</div>
-                <div style={{ fontWeight: "700", fontSize: "1rem", color: "var(--text-primary)" }}>{ideaTitle}</div>
-                {ideaDescription && (
-                  <p className="idea-preview" style={{ marginTop: "0.25rem", fontStyle: "normal" }}>
-                    {ideaDescription}
+              {/* Right Column: Editor Form */}
+              <div className="admin-form-container">
+                <div className="card">
+                  <h2 className="card-title">
+                    {isEditing ? `Bewerken ${formTokenId.toUpperCase()}` : "Idee Handmatig Koppelen"}
+                  </h2>
+                  <p className="card-description">
+                    {isEditing 
+                      ? "Pas de velden aan en sla de wijzigingen op in Firestore." 
+                      : "Kies een token en voeg direct een idee toe via het beheerpaneel."}
                   </p>
-                )}
+
+                  <form onSubmit={handleAdminSave} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                    <div className="input-group">
+                      <label htmlFor="form-token-select" className="input-label">Selecteer Token</label>
+                      <select
+                        id="form-token-select"
+                        className="select-input"
+                        value={formTokenId}
+                        onChange={(e) => setFormTokenId(e.target.value)}
+                        disabled={isEditing}
+                      >
+                        {SEED_TOKENS.map(t => (
+                          <option key={t.id} value={t.id}>
+                            {t.name} {isTokenOccupied(t.id) && !isEditing ? "(BEZET)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="input-group">
+                      <label htmlFor="form-title" className="input-label">Idee Titel</label>
+                      <input
+                        id="form-title"
+                        type="text"
+                        className="text-input"
+                        value={formTitle}
+                        onChange={(e) => setFormTitle(e.target.value)}
+                        placeholder="Bijv. Smart whiteboard link"
+                        required
+                      />
+                    </div>
+
+                    <div className="input-group">
+                      <label htmlFor="form-desc" className="input-label">Beschrijving (Context)</label>
+                      <textarea
+                        id="form-desc"
+                        className="text-input textarea-input"
+                        style={{ minHeight: "100px" }}
+                        value={formDescription}
+                        onChange={(e) => setFormDescription(e.target.value)}
+                        placeholder="Voeg optioneel details of extra context toe..."
+                      />
+                    </div>
+
+                    <div className="input-group">
+                      <label htmlFor="form-status" className="input-label">Status</label>
+                      <select
+                        id="form-status"
+                        className="select-input"
+                        value={formStatus}
+                        onChange={(e) => setFormStatus(e.target.value)}
+                      >
+                        <option value="draft">draft</option>
+                        <option value="active">active</option>
+                        <option value="clustered">clustered</option>
+                        <option value="selected">selected</option>
+                      </select>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+                      <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+                        <Database size={18} />
+                        Opslaan
+                      </button>
+                      {isEditing && (
+                        <button 
+                          type="button" 
+                          className="btn btn-secondary" 
+                          onClick={handleCancelEdit}
+                          style={{ width: "auto" }}
+                        >
+                          Annuleer
+                        </button>
+                      )}
+                    </div>
+                  </form>
+                </div>
               </div>
-
-              <button
-                id="add-another-idea-btn"
-                className="btn btn-primary"
-                onClick={handleAddAnotherIdea}
-              >
-                <RefreshCw size={18} />
-                Nog een idee toevoegen
-              </button>
-            </div>
+            </main>
           )}
-        </main>
-      )}
 
-      {/* FOOTER & NAVIGATION PROGRESS */}
-      <footer className="app-footer">
-        {isAdmin ? (
-          <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "0.25rem" }}>
-            <Wifi size={14} color="var(--success)" />
-            Real-time Firestore Sync Actief
-          </div>
-        ) : (
-          <div className="progress-dots">
-            <div className={`dot ${userStep === "session" ? "active" : ""}`} />
-            <div className={`dot ${userStep === "idea" ? "active" : ""}`} />
-            <div className={`dot ${userStep === "token" || userStep === "submitting" ? "active" : ""}`} />
-            <div className={`dot ${userStep === "success" ? "active" : ""}`} />
-          </div>
-        )}
+          {/* FOOTER BUTTONS */}
+          <footer className="app-footer">
+            <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "0.25rem" }}>
+              <Wifi size={14} color="var(--success)" />
+              Real-time Firestore Sync Actief
+            </div>
 
-        {isAdmin ? (
-          <button 
-            className="reset-session-btn"
-            onClick={() => navigateTo("/")}
-          >
-            Naar gebruikersflow
-          </button>
-        ) : (
-          userStep !== "session" && (
             <button 
               className="reset-session-btn" 
-              onClick={() => {
-                setUserStep("session");
-                setIdeaTitle("");
-                setIdeaDescription("");
-                setSelectedToken("");
-              }}
+              onClick={handleExitSession}
             >
               Wissel van sessie
             </button>
-          )
-        )}
-      </footer>
+          </footer>
+        </>
+      )}
 
-      {/* DEBUG INFORMATION CONSOLE */}
+      {/* DEBUG CONSOLE */}
       <section className="debug-section">
         <div className="debug-title">
           <span>Firestore Debug Console</span>
