@@ -27,15 +27,26 @@ import {
 } from "lucide-react";
 import "./App.css";
 
-// The 6 seed tokens with design/color properties
-const SEED_TOKENS = [
-  { id: "seed-01", name: "Seed 01", class: "token-seed-01" },
-  { id: "seed-02", name: "Seed 02", class: "token-seed-02" },
-  { id: "seed-03", name: "Seed 03", class: "token-seed-03" },
-  { id: "seed-04", name: "Seed 04", class: "token-seed-04" },
-  { id: "seed-05", name: "Seed 05", class: "token-seed-05" },
-  { id: "seed-06", name: "Seed 06", class: "token-seed-06" },
-];
+// Scalable token configuration
+const TOKEN_COUNT = 30;
+
+const generateTokens = (count) => {
+  const tokens = [];
+  for (let i = 1; i <= count; i++) {
+    const pad = String(i).padStart(3, "0");
+    const id = `seed-${pad}`;
+    // Cycle through the 6 color classes defined in App.css
+    const colorIndex = String(((i - 1) % 6) + 1).padStart(2, "0");
+    tokens.push({
+      id,
+      name: `Seed ${pad}`,
+      class: `token-seed-${colorIndex}`
+    });
+  }
+  return tokens;
+};
+
+const SEED_TOKENS = generateTokens(TOKEN_COUNT);
 
 // ==========================================
 // SKETCHPAD SUB-COMPONENT (HTML5 CANVAS)
@@ -202,6 +213,9 @@ function SketchPad({ canvasRef, initialSketch, onDrawStart, onClear }) {
 // MAIN COMPONENT
 // ==========================================
 function App() {
+  // Show debug console only if ?debug=true query parameter is present
+  const showDebug = new URLSearchParams(window.location.search).get("debug") === "true";
+
   // App structure state: 'session' | 'hub'
   const [step, setStep] = useState(
     window.location.pathname === "/admin" ? "hub" : "session"
@@ -232,7 +246,7 @@ function App() {
   const [adminError, setAdminError] = useState(null);
   const [adminSuccess, setAdminSuccess] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [formTokenId, setFormTokenId] = useState("seed-01");
+  const [formTokenId, setFormTokenId] = useState("seed-001");
   const [formTitle, setFormTitle] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formSketch, setFormSketch] = useState(null);
@@ -300,41 +314,57 @@ function App() {
   }, [sessionId, isConfigured]);
 
   const isTokenOccupied = (tokenId) => {
-    return !!tokensData[tokenId];
+    const doc = tokensData[tokenId];
+    return !!doc && ["draft", "active", "clustered", "selected"].includes(doc.status);
+  };
+
+  const isTokenFree = (tokenId) => {
+    const doc = tokensData[tokenId];
+    return !doc || doc.status === "archived";
+  };
+
+  const getFirstFreeTokenId = () => {
+    const freeToken = SEED_TOKENS.find(token => isTokenFree(token.id));
+    return freeToken ? freeToken.id : null;
   };
 
   // ==========================================
   // MOBILE USER FLOW (TAB A)
   // ==========================================
-  const handleNextToTokenSelect = () => {
-    // If the canvas was drawn on, export the drawing to a Data URL
-    if (hasSketch && canvasRef.current) {
-      try {
-        setSketchDataUrl(canvasRef.current.toDataURL("image/png"));
-      } catch (e) {
-        console.error("Error exporting canvas sketch:", e);
-      }
-    }
-    setUserWizardStep("token");
-  };
-
   const handleUserSubmit = async () => {
     if (!isConfigured) {
       setDbError("Firebase is niet geconfigureerd. Voeg je credentials toe.");
       return;
     }
 
+    const firstFreeToken = getFirstFreeTokenId();
+    if (!firstFreeToken) {
+      setDbError("Alle seed tokens zijn in gebruik. Archiveer een seed in de beheeromgeving of start een nieuwe sessie.");
+      return;
+    }
+
+    // Export the sketch from canvas before submitting
+    let currentSketchDataUrl = sketchDataUrl;
+    if (hasSketch && canvasRef.current) {
+      try {
+        currentSketchDataUrl = canvasRef.current.toDataURL("image/png");
+        setSketchDataUrl(currentSketchDataUrl);
+      } catch (e) {
+        console.error("Error exporting canvas sketch:", e);
+      }
+    }
+
     setUserWizardStep("submitting");
     setDbError(null);
 
     try {
-      const docRef = doc(db, "sessions", sessionId, "tokens", selectedToken);
+      const docRef = doc(db, "sessions", sessionId, "tokens", firstFreeToken);
       
       const payload = {
-        tokenId: selectedToken,
+        tokenId: firstFreeToken,
         title: ideaTitle.trim(),
         description: ideaDescription.trim(),
-        sketch: sketchDataUrl || null,
+        sketch: currentSketchDataUrl || null,
         status: "active",
         source: "phone",
         cluster: null,
@@ -345,11 +375,12 @@ function App() {
       };
 
       await setDoc(docRef, payload, { merge: true });
+      setSelectedToken(firstFreeToken);
       setUserWizardStep("success");
     } catch (err) {
       console.error("User save failed:", err);
       setDbError(`Opslaan mislukt: ${err.message}`);
-      setUserWizardStep("token");
+      setUserWizardStep("idea");
     }
   };
 
@@ -615,69 +646,26 @@ function App() {
                     }}
                   />
 
-                  <button
-                    id="link-to-token-btn"
-                    className="btn btn-primary"
-                    onClick={handleNextToTokenSelect}
-                    disabled={!ideaTitle.trim()}
-                    style={{ marginTop: "0.5rem" }}
-                  >
-                    Koppel aan seed token
-                    <ArrowRight size={18} />
-                  </button>
-                </div>
-              )}
-
-              {/* Wizard Step 2: Select Token */}
-              {userWizardStep === "token" && (
-                <div className="card">
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <button 
-                      className="btn btn-secondary" 
-                      style={{ width: "auto", padding: "0.5rem" }}
-                      onClick={() => setUserWizardStep("idea")}
-                    >
-                      <ArrowLeft size={16} />
-                    </button>
-                    <h2 className="card-title">Kies seed token</h2>
-                  </div>
-
-                  <p className="card-description">
-                    Selecteer een vrije token. Bezette tokens zijn rood en disabled.
-                  </p>
-
-                  <div className="token-grid">
-                    {SEED_TOKENS.map((token) => {
-                      const occupied = isTokenOccupied(token.id);
-                      const isSelected = selectedToken === token.id;
-
-                      return (
-                        <button
-                          key={token.id}
-                          id={`token-btn-${token.id}`}
-                          className={`token-button ${isSelected ? "selected" : ""} ${occupied ? "occupied" : ""}`}
-                          onClick={() => !occupied && setSelectedToken(token.id)}
-                          disabled={occupied}
-                          type="button"
-                        >
-                          <div className={`token-indicator ${token.class}`} />
-                          <span className="token-name">{token.name}</span>
-                          
-                          {occupied ? (
-                            <span className="token-status-label token-status-occupied">Bezet</span>
-                          ) : (
-                            <span className="token-status-label token-status-free">Vrij</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {/* Availability indicator & Warning if all occupied */}
+                  {getFirstFreeTokenId() === null ? (
+                    <div className="error-banner" style={{ marginTop: "0.5rem" }}>
+                      <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+                      <div>
+                        Alle seed tokens zijn in gebruik. Archiveer een seed in de beheeromgeving of start een nieuwe sessie.
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: "0.9rem", color: "var(--text-secondary)", fontWeight: "500", marginTop: "0.5rem" }}>
+                      Beschikbare seed tokens: {SEED_TOKENS.filter(t => isTokenFree(t.id)).length} van {TOKEN_COUNT}
+                    </div>
+                  )}
 
                   <button
                     id="send-to-table-btn"
                     className="btn btn-primary"
                     onClick={handleUserSubmit}
-                    disabled={!selectedToken}
+                    disabled={!ideaTitle.trim() || getFirstFreeTokenId() === null}
+                    style={{ marginTop: "0.5rem" }}
                   >
                     <Database size={18} />
                     Verstuur naar tafel
@@ -696,56 +684,60 @@ function App() {
               )}
 
               {/* Wizard Step 4: Success Confirmation */}
-              {userWizardStep === "success" && (
-                <div className="card success-card">
-                  <div className="success-icon-wrapper">
-                    <CheckCircle2 size={36} />
-                  </div>
-                  
-                  <h2 className="card-title">Seed geactiveerd!</h2>
-                  
-                  <div className="success-badge">
-                    {selectedToken.toUpperCase()}
-                  </div>
+              {userWizardStep === "success" && (() => {
+                const padNum = selectedToken ? selectedToken.split("-")[1] : "";
+                const formattedTokenName = `Seed ${padNum}`;
+                return (
+                  <div className="card success-card">
+                    <div className="success-icon-wrapper">
+                      <CheckCircle2 size={36} />
+                    </div>
+                    
+                    <h2 className="card-title">{formattedTokenName} is geactiveerd</h2>
+                    
+                    <div className="success-badge">
+                      {selectedToken.toUpperCase()}
+                    </div>
 
-                  <div className="success-instruction">
-                    Pak nu de fysieke seed token en leg hem op de interactieve tafel.
-                  </div>
+                    <div className="success-instruction">
+                      Pak de fysieke {formattedTokenName} en leg hem op de interactieve tafel.
+                    </div>
 
-                  <div style={{ width: "100%", margin: "0.5rem 0 1rem 0", textAlign: "left" }}>
-                    <div className="input-label" style={{ marginBottom: "0.25rem" }}>Gekoppeld idee:</div>
-                    <div style={{ fontWeight: "700", fontSize: "1rem", color: "var(--text-primary)" }}>{ideaTitle}</div>
-                    {ideaDescription && (
-                      <p className="idea-preview" style={{ marginTop: "0.25rem", fontStyle: "normal" }}>
-                        {ideaDescription}
-                      </p>
-                    )}
-                    {sketchDataUrl && (
-                      <div className="sketch-thumbnail-container" style={{ width: "100%", marginTop: "0.5rem" }}>
-                        <img src={sketchDataUrl} className="sketch-thumbnail-img" alt="Activated sketch" />
-                      </div>
-                    )}
-                  </div>
+                    <div style={{ width: "100%", margin: "0.5rem 0 1rem 0", textAlign: "left" }}>
+                      <div className="input-label" style={{ marginBottom: "0.25rem" }}>Gekoppeld idee:</div>
+                      <div style={{ fontWeight: "700", fontSize: "1rem", color: "var(--text-primary)" }}>{ideaTitle}</div>
+                      {ideaDescription && (
+                        <p className="idea-preview" style={{ marginTop: "0.25rem", fontStyle: "normal" }}>
+                          {ideaDescription}
+                        </p>
+                      )}
+                      {sketchDataUrl && (
+                        <div className="sketch-thumbnail-container" style={{ width: "100%", marginTop: "0.5rem" }}>
+                          <img src={sketchDataUrl} className="sketch-thumbnail-img" alt="Activated sketch" />
+                        </div>
+                      )}
+                    </div>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", width: "100%" }}>
-                    <button
-                      id="add-another-idea-btn"
-                      className="btn btn-primary"
-                      onClick={handleAddAnotherIdea}
-                    >
-                      <RefreshCw size={18} />
-                      Nog een idee toevoegen
-                    </button>
-                    <button
-                      className="btn btn-secondary"
-                      onClick={handleGoToManage}
-                    >
-                      <Settings size={18} />
-                      Ga naar ideeënbeheer
-                    </button>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", width: "100%" }}>
+                      <button
+                        id="add-another-idea-btn"
+                        className="btn btn-primary"
+                        onClick={handleAddAnotherIdea}
+                      >
+                        <RefreshCw size={18} />
+                        Nog een idee toevoegen
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={handleGoToManage}
+                      >
+                        <Settings size={18} />
+                        Ga naar ideeënbeheer
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </main>
           )}
 
@@ -757,8 +749,11 @@ function App() {
                 <div className="card" style={{ paddingBottom: "1.25rem" }}>
                   <h2 className="card-title">Token Status Overzicht</h2>
                   <p className="card-description">
-                    Hieronder zie je real-time welke van de 6 fysieke tokens in sessie <strong>{sessionId}</strong> bezet of vrij zijn.
+                    Hieronder zie je real-time welke van de {TOKEN_COUNT} fysieke tokens in sessie <strong>{sessionId}</strong> bezet of vrij zijn.
                   </p>
+                  <div style={{ fontSize: "0.9rem", color: "var(--text-secondary)", fontWeight: "500", marginTop: "0.5rem" }}>
+                    Volgende automatisch gekozen token: <strong style={{ color: "var(--accent)" }}>{getFirstFreeTokenId() ? `Seed ${getFirstFreeTokenId().split("-")[1]}` : "Geen (alle tokens bezet)"}</strong>
+                  </div>
                   
                   {adminSuccess && (
                     <div className="error-banner" style={{ backgroundColor: "var(--success-glow)", borderColor: "var(--success)", marginTop: "1rem" }}>
@@ -780,10 +775,16 @@ function App() {
                 <div className="admin-card-list">
                   {SEED_TOKENS.map((token) => {
                     const data = tokensData[token.id];
+                    const hasDoc = !!data;
                     const occupied = isTokenOccupied(token.id);
+                    const isNextFree = token.id === getFirstFreeTokenId();
 
                     return (
-                      <div key={token.id} className="admin-token-card">
+                      <div 
+                        key={token.id} 
+                        className="admin-token-card"
+                        style={isNextFree ? { border: "2px solid var(--accent)", boxShadow: "0 0 10px var(--accent-glow)" } : {}}
+                      >
                         <div className="admin-token-header">
                           <div className="admin-token-title-row">
                             <span className={`admin-token-id-badge ${token.class}`}>
@@ -794,15 +795,20 @@ function App() {
                             ) : (
                               <span className="occ-pill occ-free">Vrij</span>
                             )}
+                            {isNextFree && (
+                              <span className="occ-pill" style={{ backgroundColor: "rgba(99, 102, 241, 0.2)", color: "var(--accent)", border: "1px solid var(--accent)" }}>
+                                Volgende
+                              </span>
+                            )}
                           </div>
-                          {occupied && (
+                          {hasDoc && (
                             <span className={`status-pill status-${data.status}`}>
                               {data.status}
                             </span>
                           )}
                         </div>
 
-                        {occupied ? (
+                        {hasDoc ? (
                           <>
                             <div>
                               <div className="admin-idea-title">{data.title}</div>
@@ -938,6 +944,7 @@ function App() {
                         <option value="active">active</option>
                         <option value="clustered">clustered</option>
                         <option value="selected">selected</option>
+                        <option value="archived">archived</option>
                       </select>
                     </div>
 
@@ -981,22 +988,51 @@ function App() {
       )}
 
       {/* DEBUG CONSOLE */}
-      <section className="debug-section">
-        <div className="debug-title">
-          <span>Firestore Debug Console</span>
-          {!isConfigured && (
-            <span style={{ color: "var(--danger)", display: "flex", alignItems: "center", gap: "0.25rem" }}>
-              <ShieldAlert size={12} />
-              Geen verbinding
-            </span>
-          )}
-        </div>
-        <div>
-          <div>Huidig database pad: <strong className="debug-path">sessions/{sessionId}/tokens</strong></div>
-          <div>Verbindingsstatus: <strong>{isConfigured ? "Geactiveerd" : "Niet Geconfigureerd"}</strong></div>
-          <div>Aantal tokens ingeladen: <strong>{Object.keys(tokensData).length}</strong></div>
-        </div>
-      </section>
+      {showDebug && (
+        <section className="debug-section">
+          <div className="debug-title">
+            <span>Firestore Debug Console</span>
+            {!isConfigured && (
+              <span style={{ color: "var(--danger)", display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                <ShieldAlert size={12} />
+                Geen verbinding
+              </span>
+            )}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <div>Huidig database pad: <strong className="debug-path">sessions/{sessionId}/tokens</strong></div>
+            <div>Verbindingsstatus: <strong>{isConfigured ? "Geactiveerd" : "Niet Geconfigureerd"}</strong></div>
+            <div>Aantal tokens in database: <strong>{Object.keys(tokensData).length}</strong></div>
+            
+            <div style={{ borderTop: "1px solid rgba(255, 255, 255, 0.1)", paddingTop: "0.5rem", marginTop: "0.5rem" }}>
+              <strong>MOBUS Token Debugging:</strong>
+            </div>
+            <div>TOKEN_COUNT: <strong>{TOKEN_COUNT}</strong></div>
+            <div>Volgende beschikbare token: <strong style={{ color: "var(--accent)" }}>{getFirstFreeTokenId() || "Geen (alles bezet)"}</strong></div>
+            
+            <div>
+              <div>Bezette tokens ({SEED_TOKENS.filter(t => isTokenOccupied(t.id)).length}):</div>
+              <div style={{ color: "#fca5a5", wordBreak: "break-all" }}>
+                {SEED_TOKENS.filter(t => isTokenOccupied(t.id)).map(t => t.id).join(", ") || "Geen"}
+              </div>
+            </div>
+
+            <div>
+              <div>Vrije tokens ({SEED_TOKENS.filter(t => isTokenFree(t.id)).length}):</div>
+              <div style={{ color: "#a7f3d0", wordBreak: "break-all" }}>
+                {SEED_TOKENS.filter(t => isTokenFree(t.id)).map(t => t.id).join(", ") || "Geen"}
+              </div>
+            </div>
+
+            <div>
+              <div>Alle tokenIds ({SEED_TOKENS.length}):</div>
+              <div style={{ color: "var(--text-muted)", fontSize: "0.7rem", wordBreak: "break-all" }}>
+                {SEED_TOKENS.map(t => t.id).join(", ")}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
