@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { db, isConfigured } from "./firebase";
 import { 
   collection, 
@@ -21,9 +21,9 @@ import {
   Trash2,
   Plus,
   Wifi,
-  FileText,
   ShieldAlert,
-  Settings
+  Settings,
+  Palette
 } from "lucide-react";
 import "./App.css";
 
@@ -37,8 +37,182 @@ const SEED_TOKENS = [
   { id: "seed-06", name: "Seed 06", class: "token-seed-06" },
 ];
 
+// ==========================================
+// SKETCHPAD SUB-COMPONENT (HTML5 CANVAS)
+// ==========================================
+function SketchPad({ canvasRef, initialSketch, onDrawStart, onClear }) {
+  const isDrawingRef = useRef(false);
+  const contextRef = useRef(null);
+  const [brushSize, setBrushSize] = useState(4);
+  const [brushColor, setBrushColor] = useState("#a5b4fc"); // Default light indigo/violet
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // Make canvas size match container bounding rectangle
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width || 400;
+    canvas.height = rect.height || 220;
+
+    const context = canvas.getContext("2d");
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.strokeStyle = brushColor;
+    context.lineWidth = brushSize;
+    contextRef.current = context;
+
+    // Load initial drawing if returning from another step
+    if (initialSketch) {
+      const img = new Image();
+      img.onload = () => {
+        context.drawImage(img, 0, 0);
+      };
+      img.src = initialSketch;
+    }
+
+    // Handle viewport resize: preserves drawing by drawing to virtual copy first
+    const handleResize = () => {
+      const tempImage = canvas.toDataURL();
+      const r = canvas.getBoundingClientRect();
+      canvas.width = r.width || 400;
+      canvas.height = r.height || 220;
+      
+      const img = new Image();
+      img.onload = () => {
+        context.drawImage(img, 0, 0);
+      };
+      img.src = tempImage;
+      
+      context.lineCap = "round";
+      context.lineJoin = "round";
+      context.strokeStyle = brushColor;
+      context.lineWidth = brushSize;
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [initialSketch]);
+
+  // Sync state modifications with 2D Context
+  useEffect(() => {
+    if (contextRef.current) {
+      contextRef.current.strokeStyle = brushColor;
+      contextRef.current.lineWidth = brushSize;
+    }
+  }, [brushColor, brushSize]);
+
+  // Translate client mouse/touch coordinates relative to canvas boundaries
+  const getCoordinates = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+
+    const rect = canvas.getBoundingClientRect();
+    
+    // Support touch devices (first pointer location)
+    if (e.touches && e.touches.length > 0) {
+      return {
+        x: e.touches[0].clientX - rect.left,
+        y: e.touches[0].clientY - rect.top,
+      };
+    }
+    
+    // Support mouse pointer
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+  };
+
+  const startDrawing = (e) => {
+    e.preventDefault();
+    const { x, y } = getCoordinates(e);
+    contextRef.current.beginPath();
+    contextRef.current.moveTo(x, y);
+    isDrawingRef.current = true;
+    if (onDrawStart) onDrawStart();
+  };
+
+  const draw = (e) => {
+    if (!isDrawingRef.current) return;
+    e.preventDefault();
+    const { x, y } = getCoordinates(e);
+    contextRef.current.lineTo(x, y);
+    contextRef.current.stroke();
+  };
+
+  const stopDrawing = () => {
+    isDrawingRef.current = false;
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    if (onClear) onClear();
+  };
+
+  return (
+    <div className="sketch-section">
+      <div className="canvas-header">
+        <span className="input-label" style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+          <Palette size={14} color="#6366f1" />
+          Schets / Tekening (Optioneel)
+        </span>
+        <button type="button" className="btn-remove-sketch" style={{ position: "static", padding: "0.25rem 0.5rem" }} onClick={clearCanvas}>
+          Wis
+        </button>
+      </div>
+      
+      <div className="canvas-wrapper">
+        <canvas
+          ref={canvasRef}
+          className="sketch-canvas"
+          onMouseDown={startDrawing}
+          onMouseMove={draw}
+          onMouseUp={stopDrawing}
+          onMouseLeave={stopDrawing}
+          onTouchStart={startDrawing}
+          onTouchMove={draw}
+          onTouchEnd={stopDrawing}
+        />
+      </div>
+      
+      <div className="sketch-toolbar">
+        <div className="sketch-tools-left">
+          {[2, 4, 8].map((size) => (
+            <button
+              key={size}
+              type="button"
+              className={`brush-btn ${brushSize === size ? "active" : ""}`}
+              onClick={() => setBrushSize(size)}
+            >
+              {size === 2 ? "Dun" : size === 4 ? "Middel" : "Dik"}
+            </button>
+          ))}
+        </div>
+        
+        <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
+          {["#a5b4fc", "#6366f1", "#10b981", "#f59e0b", "#ef4444", "#ffffff"].map((color) => (
+            <div
+              key={color}
+              className={`brush-color-dot ${brushColor === color ? "active" : ""}`}
+              style={{ backgroundColor: color }}
+              onClick={() => setBrushColor(color)}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// MAIN COMPONENT
+// ==========================================
 function App() {
-  // App structure state: 'session' (Start Screen) | 'hub' (Session Hub with tabs)
+  // App structure state: 'session' | 'hub'
   const [step, setStep] = useState(
     window.location.pathname === "/admin" ? "hub" : "session"
   );
@@ -47,15 +221,21 @@ function App() {
     window.location.pathname === "/admin" ? "manage" : "input"
   );
 
-  // Connection & session parameters
+  // Connection parameters
   const [sessionId, setSessionId] = useState("mobus-001");
-  const [tokensData, setTokensData] = useState({}); // Real-time values synced from Firestore
+  const [tokensData, setTokensData] = useState({}); 
   const [dbError, setDbError] = useState(null);
 
   // --- TAB A: NEW IDEA WIZARD STATE ---
-  const [userWizardStep, setUserWizardStep] = useState("idea"); // 'idea' | 'token' | 'submitting' | 'success'
+  const [userWizardStep, setUserWizardStep] = useState("idea");
   const [ideaTitle, setIdeaTitle] = useState("");
   const [ideaDescription, setIdeaDescription] = useState("");
+  
+  // Sketching controls
+  const canvasRef = useRef(null);
+  const [hasSketch, setHasSketch] = useState(false);
+  const [sketchDataUrl, setSketchDataUrl] = useState(null);
+
   const [selectedToken, setSelectedToken] = useState("");
 
   // --- TAB B: ADMIN / MANAGE STATE ---
@@ -65,9 +245,10 @@ function App() {
   const [formTokenId, setFormTokenId] = useState("seed-01");
   const [formTitle, setFormTitle] = useState("");
   const [formDescription, setFormDescription] = useState("");
+  const [formSketch, setFormSketch] = useState(null);
   const [formStatus, setFormStatus] = useState("active");
 
-  // Sync route and tabs with browser back/forward buttons (popstate)
+  // Sync route and tabs with browser back/forward buttons
   useEffect(() => {
     const handleLocationChange = () => {
       const isAdminPath = window.location.pathname === "/admin";
@@ -75,7 +256,6 @@ function App() {
         setStep("hub");
         setActiveTab("manage");
       } else {
-        // If they navigate back to /, we switch to input tab
         setActiveTab("input");
       }
     };
@@ -111,7 +291,6 @@ function App() {
     setDbError(null);
     const tokensCollectionRef = collection(db, "sessions", sessionId, "tokens");
     
-    // Bind snapshot listener
     const unsubscribe = onSnapshot(
       tokensCollectionRef, 
       (snapshot) => {
@@ -122,7 +301,7 @@ function App() {
         setTokensData(data);
       },
       (err) => {
-        console.error("Firestore synchronisation error:", err);
+        console.error("Firestore sync error:", err);
         setDbError(`Fout bij laden van database updates: ${err.message}`);
       }
     );
@@ -130,22 +309,28 @@ function App() {
     return () => unsubscribe();
   }, [sessionId, isConfigured]);
 
-  // Helpers to evaluate token occupancy
   const isTokenOccupied = (tokenId) => {
-    // If a document exists, the token is occupied
     return !!tokensData[tokenId];
-  };
-
-  const isTokenFree = (tokenId) => {
-    return !isTokenOccupied(tokenId);
   };
 
   // ==========================================
   // MOBILE USER FLOW (TAB A)
   // ==========================================
+  const handleNextToTokenSelect = () => {
+    // If the canvas was drawn on, export the drawing to a Data URL
+    if (hasSketch && canvasRef.current) {
+      try {
+        setSketchDataUrl(canvasRef.current.toDataURL("image/png"));
+      } catch (e) {
+        console.error("Error exporting canvas sketch:", e);
+      }
+    }
+    setUserWizardStep("token");
+  };
+
   const handleUserSubmit = async () => {
     if (!isConfigured) {
-      setDbError("Firebase is niet geconfigureerd. Voer je credentials in.");
+      setDbError("Firebase is niet geconfigureerd. Voeg je credentials toe.");
       return;
     }
 
@@ -159,6 +344,7 @@ function App() {
         tokenId: selectedToken,
         title: ideaTitle.trim(),
         description: ideaDescription.trim(),
+        sketch: sketchDataUrl || null,
         status: "active",
         source: "phone",
         cluster: null,
@@ -180,20 +366,21 @@ function App() {
   const handleAddAnotherIdea = () => {
     setIdeaTitle("");
     setIdeaDescription("");
+    setHasSketch(false);
+    setSketchDataUrl(null);
     setSelectedToken("");
     setDbError(null);
     setUserWizardStep("idea");
   };
 
   const handleGoToManage = () => {
-    // Reset the input wizard state
     setIdeaTitle("");
     setIdeaDescription("");
+    setHasSketch(false);
+    setSketchDataUrl(null);
     setSelectedToken("");
     setDbError(null);
     setUserWizardStep("idea");
-    
-    // Switch to the management view
     handleTabChange("manage");
   };
 
@@ -205,6 +392,7 @@ function App() {
     setFormTokenId(token.tokenId);
     setFormTitle(token.title || "");
     setFormDescription(token.description || "");
+    setFormSketch(token.sketch || null);
     setFormStatus(token.status || "active");
     setAdminError(null);
     setAdminSuccess(null);
@@ -217,6 +405,7 @@ function App() {
   const resetAdminForm = () => {
     setFormTitle("");
     setFormDescription("");
+    setFormSketch(null);
     setFormStatus("active");
     setIsEditing(false);
   };
@@ -243,12 +432,12 @@ function App() {
         tokenId: formTokenId,
         title: formTitle.trim(),
         description: formDescription.trim(),
+        sketch: formSketch, // Preserved or cleared sketch
         status: formStatus,
         source: "admin",
         updatedAt: serverTimestamp()
       };
 
-      // Set baseline values if creating a brand new record
       if (!existingDoc || !isEditing) {
         payload.createdAt = serverTimestamp();
         payload.cluster = null;
@@ -271,7 +460,7 @@ function App() {
 
   const handlePermanentDelete = async (tokenId) => {
     if (!isConfigured) return;
-    if (!window.confirm(`Weet je zeker dat je het idee op ${tokenId.toUpperCase()} permanent wilt verwijderen uit de database?`)) {
+    if (!window.confirm(`Weet je zeker dat je het idee op ${tokenId.toUpperCase()} permanent wilt verwijderen?`)) {
       return;
     }
     try {
@@ -284,7 +473,6 @@ function App() {
     }
   };
 
-  // Exit active session and return to Start Screen
   const handleExitSession = () => {
     setSessionId("mobus-001");
     handleAddAnotherIdea();
@@ -391,7 +579,7 @@ function App() {
             </div>
           )}
 
-          {/* TAB CONTENT: A. NEW IDEA WIZARD (MOBILE FLOW) */}
+          {/* TAB CONTENT: A. NEW IDEA WIZARD (MOBILE FLOW WITH SKETCHPAD) */}
           {activeTab === "input" && (
             <main className="screen-container">
               {/* Wizard Step 1: Input Form */}
@@ -399,7 +587,7 @@ function App() {
                 <div className="card">
                   <h2 className="card-title">Wat wil je inbrengen?</h2>
                   <p className="card-description">
-                    Voer een korte titel in en leg kort de context of betekenis van je idee uit.
+                    Voer een korte titel in en beschrijf je idee. Je kan optioneel een schets toevoegen.
                   </p>
 
                   <div className="input-group">
@@ -419,18 +607,30 @@ function App() {
                     <textarea
                       id="idea-desc"
                       className="text-input textarea-input"
-                      style={{ minHeight: "100px" }}
+                      style={{ minHeight: "80px" }}
                       value={ideaDescription}
                       onChange={(e) => setIdeaDescription(e.target.value)}
-                      placeholder="Voeg eventueel extra context of voorbeelden toe..."
+                      placeholder="Voeg optioneel context of voorbeelden toe..."
                     />
                   </div>
+
+                  {/* DRAWING CANVAS SECTION */}
+                  <SketchPad
+                    canvasRef={canvasRef}
+                    initialSketch={sketchDataUrl}
+                    onDrawStart={() => setHasSketch(true)}
+                    onClear={() => {
+                      setHasSketch(false);
+                      setSketchDataUrl(null);
+                    }}
+                  />
 
                   <button
                     id="link-to-token-btn"
                     className="btn btn-primary"
-                    onClick={() => setUserWizardStep("token")}
+                    onClick={handleNextToTokenSelect}
                     disabled={!ideaTitle.trim()}
+                    style={{ marginTop: "0.5rem" }}
                   >
                     Koppel aan seed token
                     <ArrowRight size={18} />
@@ -453,7 +653,7 @@ function App() {
                   </div>
 
                   <p className="card-description">
-                    Selecteer een vrije token om je idee aan te koppelen. Bezette tokens zijn rood en disabled.
+                    Selecteer een vrije token. Bezette tokens zijn rood en disabled.
                   </p>
 
                   <div className="token-grid">
@@ -522,13 +722,18 @@ function App() {
                     Pak nu de fysieke seed token en leg hem op de interactieve tafel.
                   </div>
 
-                  <div style={{ width: "100%", margin: "0.5rem 0 1.5rem 0", textAlign: "left" }}>
+                  <div style={{ width: "100%", margin: "0.5rem 0 1rem 0", textAlign: "left" }}>
                     <div className="input-label" style={{ marginBottom: "0.25rem" }}>Gekoppeld idee:</div>
                     <div style={{ fontWeight: "700", fontSize: "1rem", color: "var(--text-primary)" }}>{ideaTitle}</div>
                     {ideaDescription && (
                       <p className="idea-preview" style={{ marginTop: "0.25rem", fontStyle: "normal" }}>
                         {ideaDescription}
                       </p>
+                    )}
+                    {sketchDataUrl && (
+                      <div className="sketch-thumbnail-container" style={{ width: "100%", marginTop: "0.5rem" }}>
+                        <img src={sketchDataUrl} className="sketch-thumbnail-img" alt="Activated sketch" />
+                      </div>
                     )}
                   </div>
 
@@ -613,6 +818,11 @@ function App() {
                               <div className="admin-idea-title">{data.title}</div>
                               {data.description && (
                                 <p className="admin-idea-desc">{data.description}</p>
+                              )}
+                              {data.sketch && (
+                                <div className="sketch-thumbnail-container">
+                                  <img src={data.sketch} className="sketch-thumbnail-img" alt="Seed sketch preview" />
+                                </div>
                               )}
                             </div>
                             <div className="admin-token-meta">
@@ -715,6 +925,16 @@ function App() {
                         placeholder="Voeg optioneel details of extra context toe..."
                       />
                     </div>
+
+                    {formSketch && (
+                      <div className="sketch-form-preview">
+                        <div className="input-label" style={{ marginBottom: "0.25rem" }}>Gekoppelde Schets</div>
+                        <img src={formSketch} className="sketch-thumbnail-img" alt="Sketch edit preview" />
+                        <button type="button" className="btn-remove-sketch" onClick={() => setFormSketch(null)}>
+                          Verwijder Schets
+                        </button>
+                      </div>
+                    )}
 
                     <div className="input-group">
                       <label htmlFor="form-status" className="input-label">Status</label>
