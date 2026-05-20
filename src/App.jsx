@@ -43,8 +43,8 @@ const SEED_TOKENS = [
 function SketchPad({ canvasRef, initialSketch, onDrawStart, onClear }) {
   const isDrawingRef = useRef(false);
   const contextRef = useRef(null);
-  const [brushSize, setBrushSize] = useState(4);
-  const [brushColor, setBrushColor] = useState("#a5b4fc"); // Default light indigo/violet
+  const brushSize = 4; // Standard brush thickness
+  const [brushColor, setBrushColor] = useState("#ffffff"); // Default white brush for dark canvas
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -180,21 +180,12 @@ function SketchPad({ canvasRef, initialSketch, onDrawStart, onClear }) {
       </div>
       
       <div className="sketch-toolbar">
-        <div className="sketch-tools-left">
-          {[2, 4, 8].map((size) => (
-            <button
-              key={size}
-              type="button"
-              className={`brush-btn ${brushSize === size ? "active" : ""}`}
-              onClick={() => setBrushSize(size)}
-            >
-              {size === 2 ? "Dun" : size === 4 ? "Middel" : "Dik"}
-            </button>
-          ))}
+        <div>
+          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Kleur:</span>
         </div>
         
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
-          {["#a5b4fc", "#6366f1", "#10b981", "#f59e0b", "#ef4444", "#ffffff"].map((color) => (
+          {["#ffffff", "#000000", "#ff0000", "#00ff00", "#0000ff"].map((color) => (
             <div
               key={color}
               className={`brush-color-dot ${brushColor === color ? "active" : ""}`}
