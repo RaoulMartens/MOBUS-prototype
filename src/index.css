@@ -61,7 +61,6 @@ body {
 
 #root {
   width: 100%;
-  max-width: 480px; /* Force mobile portrait aspect ratio on desktop */
   min-height: 100vh;
   min-height: 100svh;
   display: flex;
@@ -71,6 +70,17 @@ body {
   border-right: 1px solid var(--border-color);
   box-shadow: var(--shadow-xl);
   overflow-x: hidden;
+  margin: 0 auto;
+}
+
+/* User route mobile constraint */
+body:not(.admin-route) #root {
+  max-width: 480px;
+}
+
+/* Admin route desktop expansion */
+body.admin-route #root {
+  max-width: 1200px;
 }
 
 /* Scrollbar styling */
