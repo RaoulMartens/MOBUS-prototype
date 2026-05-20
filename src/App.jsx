@@ -156,9 +156,8 @@ function SketchPad({ canvasRef, initialSketch, onDrawStart, onClear }) {
   return (
     <div className="sketch-section">
       <div className="canvas-header">
-        <span className="input-label" style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-          <Palette size={14} color="#6366f1" />
-          Schets / Tekening (Optioneel)
+        <span className="input-label">
+          Schets
         </span>
         <button type="button" className="btn-remove-sketch" style={{ position: "static", padding: "0.25rem 0.5rem" }} onClick={clearCanvas}>
           Wis
