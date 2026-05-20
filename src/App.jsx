@@ -183,7 +183,7 @@ function SketchPad({ canvasRef, initialSketch, onDrawStart, onClear }) {
           <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Kleur:</span>
         </div>
         
-        <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
           {["#ffffff", "#000000", "#ff0000", "#00ff00", "#0000ff"].map((color) => (
             <div
               key={color}
