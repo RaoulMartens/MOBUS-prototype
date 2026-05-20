@@ -19,7 +19,6 @@ import {
   KeyRound,
   Edit,
   Trash2,
-  Archive,
   Plus,
   Wifi,
   FileText,
@@ -118,8 +117,7 @@ function App() {
 
   // Check helper functions
   const isTokenOccupied = (tokenId) => {
-    const token = tokensData[tokenId];
-    return token && token.status !== "archived";
+    return !!tokensData[tokenId];
   };
 
   const isTokenFree = (tokenId) => {
@@ -249,21 +247,6 @@ function App() {
     } catch (err) {
       console.error("Admin save error:", err);
       setAdminError(`Opslaan mislukt: ${err.message}`);
-    }
-  };
-
-  const handleArchiveToken = async (tokenId) => {
-    if (!isConfigured) return;
-    try {
-      setAdminError(null);
-      const docRef = doc(db, "sessions", sessionId, "tokens", tokenId);
-      await setDoc(docRef, { 
-        status: "archived",
-        updatedAt: serverTimestamp() 
-      }, { merge: true });
-      setAdminSuccess(`Token ${tokenId} gearchiveerd.`);
-    } catch (err) {
-      setAdminError(`Archiveren mislukt: ${err.message}`);
     }
   };
 
@@ -410,13 +393,6 @@ function App() {
                               Bewerken
                             </button>
                             <button 
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => handleArchiveToken(token.id)}
-                            >
-                              <Archive size={14} />
-                              Archiveren
-                            </button>
-                            <button 
                               className="btn btn-danger btn-sm"
                               onClick={() => handlePermanentDelete(token.id)}
                               title="Permanent verwijderen uit database"
@@ -516,7 +492,6 @@ function App() {
                     <option value="active">active</option>
                     <option value="clustered">clustered</option>
                     <option value="selected">selected</option>
-                    <option value="archived">archived</option>
                   </select>
                 </div>
 
