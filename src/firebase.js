@@ -25,12 +25,12 @@ const firebaseConfigEnv = {
 };
 
 const firebaseConfigDirect = {
-  apiKey: "YOUR_API_KEY_HERE",
-  authDomain: "YOUR_PROJECT_ID_HERE.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID_HERE",
-  storageBucket: "YOUR_PROJECT_ID_HERE.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID_HERE",
-  appId: "YOUR_APP_ID_HERE"
+  apiKey: "AIzaSyDQxlxgipnT0OgVY_kxNL7opnMX9VTfEM8",
+  authDomain: "mobus-6aaa9.firebaseapp.com",
+  projectId: "mobus-6aaa9",
+  storageBucket: "mobus-6aaa9.firebasestorage.app",
+  messagingSenderId: "451827926532",
+  appId: "1:451827926532:web:ecca071a400d5650299751"
 };
 
 // Select which configuration to use (defaults to Option 1: Env variables)
