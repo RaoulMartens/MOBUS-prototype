@@ -18,7 +18,6 @@ import {
   KeyRound,
   Edit,
   Trash2,
-  Archive,
   Plus,
   Wifi,
   ShieldAlert,
@@ -29,9 +28,6 @@ import {
 } from "lucide-react";
 import "./App.css";
 
-// ── Utility: compute a color class from a seed number (cycles through 6 colors) ──
-const seedColorClass = (num) =>
-  `token-seed-${String(((num - 1) % 6) + 1).padStart(2, "0")}`;
 
 // ── Utility: parse the numeric part of a seed id ──
 const seedNum = (id) => {
@@ -173,95 +169,112 @@ function SketchPad({ canvasRef, initialSketch, onDrawStart, onClear }) {
 // ==========================================
 // ADMIN SEED CARD SUB-COMPONENT
 // ==========================================
-// Dutch labels for status values
-const STATUS_LABELS = {
-  active: "Actief",
-  draft: "Concept",
-  clustered: "Geclusterd",
-  selected: "Geselecteerd",
-  archived: "Gearchiveerd"
-};
+function AdminSeedCard({
+  seedId,
+  data,
+  isEditing,
+  formTitle,
+  formDescription,
+  formSketch,
+  setFormTitle,
+  setFormDescription,
+  setFormSketch,
+  onSave,
+  onCancel,
+  onEdit,
+  onDelete
+}) {
+  if (isEditing) {
+    return (
+      <form
+        onSubmit={onSave}
+        className="admin-token-card editing-mode"
+        style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+      >
+        <div className="input-group">
+          <label htmlFor={`edit-title-${seedId}`} className="input-label">Titel</label>
+          <input
+            id={`edit-title-${seedId}`}
+            type="text"
+            className="text-input"
+            value={formTitle}
+            onChange={(e) => setFormTitle(e.target.value)}
+            placeholder="Voer een titel in..."
+            required
+          />
+        </div>
 
-function AdminSeedCard({ seedId, data, onEdit, onArchive, onDelete }) {
-  const [expanded, setExpanded] = useState(false);
-  const num = seedNum(seedId);
-  const colorClass = seedColorClass(num);
-  const displayName = `Seed ${String(num).padStart(3, "0")}`;
-  const statusLabel = STATUS_LABELS[data.status] ?? data.status;
+        <div className="input-group">
+          <label htmlFor={`edit-desc-${seedId}`} className="input-label">Beschrijving</label>
+          <textarea
+            id={`edit-desc-${seedId}`}
+            className="text-input textarea-input"
+            style={{ minHeight: "100px" }}
+            value={formDescription}
+            onChange={(e) => setFormDescription(e.target.value)}
+            placeholder="Voeg optioneel details of context toe..."
+          />
+        </div>
+
+        {formSketch && (
+          <div className="sketch-form-preview" style={{ width: "100%", position: "relative" }}>
+            <div className="input-label" style={{ marginBottom: "0.25rem" }}>Gekoppelde schets</div>
+            <img src={formSketch} className="sketch-thumbnail-img" alt="Sketch preview" />
+            <button type="button" className="btn-remove-sketch" onClick={() => setFormSketch(null)}>
+              Verwijder schets
+            </button>
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem", width: "100%" }}>
+          <button type="submit" className="btn btn-primary btn-sm" style={{ flex: 1 }}>
+            <Database size={14} />
+            Wijzigingen opslaan
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={onCancel}
+            style={{ flex: 1 }}
+          >
+            Annuleer
+          </button>
+        </div>
+      </form>
+    );
+  }
 
   return (
     <div className="admin-token-card">
-      {/* ── ROW 1: Seed badge + status pill ── */}
-      <div className="seed-card-top">
-        <div className="seed-card-badges">
-          <span className={`admin-token-id-badge ${colorClass}`}>{displayName}</span>
-          <span className={`status-pill status-${data.status}`}>{statusLabel}</span>
-        </div>
-      </div>
-
-      {/* ── ROW 2: Idea content ── */}
+      {/* ── Idea content ── */}
       <div className="seed-card-content">
         <div className="seed-card-title">{data.title}</div>
         {data.description && (
           <p className="seed-card-desc">{data.description}</p>
         )}
         {data.sketch && (
-          <span className="seed-sketch-chip">
-            <Pencil size={11} /> Schets toegevoegd
-          </span>
+          <div className="sketch-thumbnail-container" style={{ marginTop: "0.5rem" }}>
+            <img src={data.sketch} className="sketch-thumbnail-img" alt="Idea sketch" />
+          </div>
         )}
       </div>
 
-      {/* ── DETAIL PANEL (collapsible) ── */}
-      {expanded && (
-        <div className="seed-card-detail">
-          <div className="seed-detail-meta">
-            <span className="admin-detail-label">Seed ID</span>
-            <span className="admin-detail-value">{seedId}</span>
-          </div>
-          {data.description && (
-            <p className="seed-detail-desc-full">{data.description}</p>
-          )}
-          {data.sketch && (
-            <div className="sketch-thumbnail-container" style={{ marginTop: "0.5rem" }}>
-              <img src={data.sketch} className="sketch-thumbnail-img" alt="Seed schets" />
-            </div>
-          )}
-          <button
-            className="btn btn-danger btn-sm"
-            style={{ marginTop: "0.75rem", width: "100%" }}
-            onClick={() => onDelete(seedId)}
-          >
-            <Trash2 size={14} />
-            Permanent verwijderen
-          </button>
-        </div>
-      )}
-
-      {/* ── ROW 3: Actions ── */}
+      {/* ── Actions ── */}
       <div className="seed-card-actions">
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => onEdit(data)}>
+        <div style={{ display: "flex", gap: "0.5rem", width: "100%" }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => onEdit(data)} style={{ flex: 1 }}>
             <Edit size={14} />
             Bewerken
           </button>
-          {data.status !== "archived" && (
-            <button
-              className="btn btn-archive btn-sm"
-              onClick={() => onArchive(seedId)}
-            >
-              <Archive size={14} />
-              Archiveer
-            </button>
-          )}
+          <button
+            className="btn btn-danger btn-sm"
+            onClick={() => onDelete(seedId)}
+            style={{ flex: 1 }}
+          >
+            <Trash2 size={14} />
+            Verwijderen
+          </button>
         </div>
-        <button
-          className="seed-detail-toggle"
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          {expanded ? "Minder" : "Details"}
-        </button>
       </div>
     </div>
   );
@@ -292,7 +305,6 @@ function App() {
   const canvasRef = useRef(null);
   const [hasSketch, setHasSketch] = useState(false);
   const [sketchDataUrl, setSketchDataUrl] = useState(null);
-  const [selectedSeedId, setSelectedSeedId] = useState("");
   const [showSketch, setShowSketch] = useState(false);
 
   // --- TAB B: ADMIN ---
@@ -304,7 +316,6 @@ function App() {
   const [formDescription, setFormDescription] = useState("");
   const [formSketch, setFormSketch] = useState(null);
   const [formStatus, setFormStatus] = useState("active");
-  const [isManualFormOpen, setIsManualFormOpen] = useState(false);
 
   // ── Routing ──
   useEffect(() => {
@@ -335,6 +346,7 @@ function App() {
   // ── Firestore real-time sync ──
   useEffect(() => {
     if (!isConfigured || !sessionId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDbError(null);
     const ref = collection(db, "sessions", sessionId, "tokens");
     const unsubscribe = onSnapshot(
@@ -405,7 +417,6 @@ function App() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      setSelectedSeedId(newSeedId);
       setUserWizardStep("success");
     } catch (err) {
       console.error("Save failed:", err);
@@ -419,7 +430,6 @@ function App() {
     setIdeaDescription("");
     setHasSketch(false);
     setSketchDataUrl(null);
-    setSelectedSeedId("");
     setShowSketch(false);
     setDbError(null);
     setUserWizardStep("idea");
@@ -455,8 +465,10 @@ function App() {
 
   // Keep formSeedId in sync with next ID when not editing
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!isEditing) setFormSeedId(getNextSeedId());
   }, [tokensData, isEditing]);
+
 
   const handleAdminSave = async (e) => {
     e.preventDefault();
@@ -495,41 +507,26 @@ function App() {
       await setDoc(docRef, payload, { merge: true });
       setAdminSuccess(
         isEditing
-          ? `Seed ${targetId.toUpperCase()} bijgewerkt.`
-          : `Seed ${targetId.toUpperCase()} aangemaakt en geplant.`
+          ? `Idee "${formTitle.trim()}" bijgewerkt.`
+          : `Idee "${formTitle.trim()}" toegevoegd.`
       );
       resetAdminForm();
-      setIsManualFormOpen(false);
     } catch (err) {
       console.error("Admin save error:", err);
       setAdminError(`Opslaan mislukt: ${err.message}`);
     }
   };
 
-  const handlePermanentDelete = async (seedId) => {
+  const handlePermanentDelete = async (seedId, title) => {
     if (!isConfigured) return;
-    if (!window.confirm(`Weet je zeker dat je seed ${seedId.toUpperCase()} permanent wilt verwijderen?`)) return;
+    const displayName = title ? `"${title}"` : "dit idee";
+    if (!window.confirm(`Weet je zeker dat je ${displayName} permanent wilt verwijderen?`)) return;
     try {
       setAdminError(null);
       await deleteDoc(doc(db, "sessions", sessionId, "tokens", seedId));
-      setAdminSuccess(`Seed ${seedId.toUpperCase()} verwijderd.`);
+      setAdminSuccess(`Idee ${displayName} verwijderd.`);
     } catch (err) {
       setAdminError(`Verwijderen mislukt: ${err.message}`);
-    }
-  };
-
-  const handleArchive = async (seedId) => {
-    if (!isConfigured) return;
-    try {
-      setAdminError(null);
-      await setDoc(
-        doc(db, "sessions", sessionId, "tokens", seedId),
-        { status: "archived", updatedAt: serverTimestamp() },
-        { merge: true }
-      );
-      setAdminSuccess(`Seed ${seedId.toUpperCase()} gearchiveerd.`);
-    } catch (err) {
-      setAdminError(`Archiveren mislukt: ${err.message}`);
     }
   };
 
@@ -540,10 +537,6 @@ function App() {
     window.history.pushState({}, "", "/");
   };
 
-  // ── Derived: formatted name for selected seed ──
-  const selectedNum = selectedSeedId ? seedNum(selectedSeedId) : 0;
-  const selectedName = selectedNum ? `Seed ${String(selectedNum).padStart(3, "0")}` : "";
-
   return (
     <div className="app-container">
 
@@ -553,9 +546,9 @@ function App() {
       {step === "session" && (
         <main className="screen-container">
           <div className="card">
-            <h2 className="card-title">MOBUS Seed Input</h2>
+            <h2 className="card-title">MOBUS Ideeën Invoer</h2>
             <p className="card-description">
-              Voeg ideeën toe aan de digitale tafel. Elke bijdrage wordt automatisch een nieuwe seed.
+              Voeg ideeën toe aan de digitale tafel. Elke bijdrage verschijnt direct als een interactief element op de tafel.
             </p>
 
             {!isConfigured && (
@@ -704,7 +697,7 @@ function App() {
                     style={{ marginTop: "0.5rem" }}
                   >
                     <Sparkles size={18} />
-                    Plant op tafel
+                    Plaats op tafel
                   </button>
                 </div>
               )}
@@ -714,7 +707,7 @@ function App() {
                 <div className="card">
                   <div className="loading-container">
                     <div className="spinner" />
-                    <span className="loading-text">Digitale seed wordt aangemaakt...</span>
+                    <span className="loading-text">Je idee wordt verzonden...</span>
                   </div>
                 </div>
               )}
@@ -726,15 +719,15 @@ function App() {
                     <CheckCircle2 size={36} />
                   </div>
 
-                  <h2 className="card-title success-headline">{selectedName} is geplant</h2>
+                  <h2 className="card-title success-headline">Je idee is geplaatst</h2>
 
                   <div className="success-instruction success-instruction-prominent">
-                    <span className="success-instruction-icon">🌱</span>
-                    Je idee verschijnt nu als digitale seed op de interactieve tafel.
+                    <span className="success-instruction-icon">💡</span>
+                    Je idee verschijnt nu direct op de interactieve tafel.
                   </div>
 
                   <div className="success-instruction-secondary">
-                    Orden deze seed straks samen met andere ideeën op de tafel — verschuif, cluster en verbind.
+                    Orden dit idee straks samen met andere ideeën op de tafel — verschuif, cluster en verbind.
                   </div>
 
                   <div className="success-idea-summary">
@@ -768,8 +761,8 @@ function App() {
           )}
 
           {/* ─────────────────────────────────────
-              TAB B: ADMIN DASHBOARD
-          ───────────────────────────────────── */}
+               TAB B: ADMIN DASHBOARD
+           ───────────────────────────────────── */}
           {activeTab === "manage" && (
             <main className="admin-layout">
 
@@ -796,10 +789,10 @@ function App() {
                 {/* Empty state */}
                 {sortedSeeds.length === 0 ? (
                   <div className="admin-empty-state">
-                    <div className="admin-empty-icon">🌱</div>
-                    <h3 className="admin-empty-title">Nog geen seeds geplaatst</h3>
+                    <div className="admin-empty-icon">💡</div>
+                    <h3 className="admin-empty-title">Nog geen ideeën toegevoegd</h3>
                     <p className="admin-empty-desc">
-                      Er zijn nog geen ideeën toegevoegd aan deze sessie. Zodra iemand een idee plant, verschijnt het hier als digitale seed.
+                      Er zijn nog geen ideeën toegevoegd aan deze sessie. Zodra je een idee toevoegt, verschijnt het hier.
                     </p>
                     <button
                       className="btn btn-primary"
@@ -807,7 +800,7 @@ function App() {
                       onClick={() => handleTabChange("input")}
                     >
                       <Plus size={16} />
-                      Ga naar Nieuw Idee
+                      Idee toevoegen
                     </button>
                   </div>
                 ) : (
@@ -815,8 +808,8 @@ function App() {
                     {/* Section header – only when seeds exist */}
                     <div className="admin-section-header">
                       <div>
-                        <h2 className="admin-section-title">Geplaatste Seeds</h2>
-                        <p className="admin-section-sub">Hier zie je alle digitale seeds die in deze sessie zijn aangemaakt.</p>
+                        <h2 className="admin-section-title">Toegevoegde ideeën</h2>
+                        <p className="admin-section-sub">Hier zie je alle ideeën die in deze sessie zijn toegevoegd.</p>
                       </div>
                       <span className="admin-seed-count">{sortedSeeds.length}</span>
                     </div>
@@ -827,132 +820,22 @@ function App() {
                           key={id}
                           seedId={id}
                           data={data}
-                          onEdit={(d) => { handleEditClick(d); setIsManualFormOpen(true); }}
-                          onArchive={handleArchive}
-                          onDelete={handlePermanentDelete}
+                          isEditing={isEditing && formSeedId === id}
+                          formTitle={formTitle}
+                          formDescription={formDescription}
+                          formSketch={formSketch}
+                          setFormTitle={setFormTitle}
+                          setFormDescription={setFormDescription}
+                          setFormSketch={setFormSketch}
+                          onSave={handleAdminSave}
+                          onCancel={resetAdminForm}
+                          onEdit={(d) => handleEditClick(d)}
+                          onDelete={(id) => handlePermanentDelete(id, data.title)}
                         />
                       ))}
                     </div>
                   </>
                 )}
-              </div>
-
-              {/* Right column: collapsible form */}
-              <div className="admin-form-container">
-                <div className="card">
-                  <button
-                    type="button"
-                    className="admin-form-toggle"
-                    onClick={() => {
-                      if (!isManualFormOpen && !isEditing) resetAdminForm();
-                      setIsManualFormOpen(!isManualFormOpen);
-                    }}
-                  >
-                    <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <Plus size={16} />
-                      {isEditing ? `Bewerken: ${formSeedId.toUpperCase()}` : "Seed handmatig planten"}
-                    </span>
-                    {isManualFormOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                  </button>
-
-                  {isManualFormOpen && (
-                    <>
-                      <p className="card-description" style={{ marginTop: "0.75rem" }}>
-                        {isEditing
-                          ? "Pas de velden aan en sla de wijzigingen op."
-                          : "Maak handmatig een nieuwe digitale seed aan via het beheerpaneel."}
-                      </p>
-
-                      <form onSubmit={handleAdminSave} style={{ display: "flex", flexDirection: "column", gap: "1.25rem", marginTop: "0.5rem" }}>
-                        <div className="input-group">
-                          <label htmlFor="form-seed-id" className="input-label">Seed ID</label>
-                          <input
-                            id="form-seed-id"
-                            type="text"
-                            className="text-input"
-                            value={formSeedId}
-                            onChange={(e) => setFormSeedId(e.target.value)}
-                            disabled={isEditing}
-                            style={{ fontFamily: "var(--mono)", opacity: isEditing ? 0.6 : 1 }}
-                          />
-                          {!isEditing && (
-                            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                              Automatisch bepaald op basis van bestaande seeds.
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="input-group">
-                          <label htmlFor="form-title" className="input-label">Titel</label>
-                          <input
-                            id="form-title"
-                            type="text"
-                            className="text-input"
-                            value={formTitle}
-                            onChange={(e) => setFormTitle(e.target.value)}
-                            placeholder="Bijv. Smart whiteboard link"
-                            required
-                          />
-                        </div>
-
-                        <div className="input-group">
-                          <label htmlFor="form-desc" className="input-label">Beschrijving</label>
-                          <textarea
-                            id="form-desc"
-                            className="text-input textarea-input"
-                            style={{ minHeight: "100px" }}
-                            value={formDescription}
-                            onChange={(e) => setFormDescription(e.target.value)}
-                            placeholder="Voeg optioneel details of context toe..."
-                          />
-                        </div>
-
-                        {formSketch && (
-                          <div className="sketch-form-preview">
-                            <div className="input-label" style={{ marginBottom: "0.25rem" }}>Gekoppelde schets</div>
-                            <img src={formSketch} className="sketch-thumbnail-img" alt="Sketch preview" />
-                            <button type="button" className="btn-remove-sketch" onClick={() => setFormSketch(null)}>
-                              Verwijder schets
-                            </button>
-                          </div>
-                        )}
-
-                        <div className="input-group">
-                          <label htmlFor="form-status" className="input-label">Status</label>
-                          <select
-                            id="form-status"
-                            className="select-input"
-                            value={formStatus}
-                            onChange={(e) => setFormStatus(e.target.value)}
-                          >
-                            <option value="draft">draft</option>
-                            <option value="active">active</option>
-                            <option value="clustered">clustered</option>
-                            <option value="selected">selected</option>
-                            <option value="archived">archived</option>
-                          </select>
-                        </div>
-
-                        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-                          <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
-                            <Database size={18} />
-                            {isEditing ? "Wijzigingen opslaan" : "Plant seed"}
-                          </button>
-                          {isEditing && (
-                            <button
-                              type="button"
-                              className="btn btn-secondary"
-                              onClick={() => { resetAdminForm(); setIsManualFormOpen(false); }}
-                              style={{ width: "auto" }}
-                            >
-                              Annuleer
-                            </button>
-                          )}
-                        </div>
-                      </form>
-                    </>
-                  )}
-                </div>
               </div>
             </main>
           )}
