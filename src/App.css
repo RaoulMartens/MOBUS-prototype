@@ -476,7 +476,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  transition: border-color 0.2s;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease;
 }
 
 .admin-token-card:hover {
@@ -617,6 +617,84 @@
   border: 2px solid var(--accent) !important;
   box-shadow: 0 0 14px var(--accent-glow);
   background-color: var(--bg-secondary) !important;
+  animation: cardExpand 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  overflow: hidden;
+}
+
+.admin-edit-form-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+  animation: editFormIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.admin-view-card-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: 100%;
+  animation: viewCardIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Stagger animations inside the edit form for premium micro-animations */
+.admin-edit-form-inner > .input-group,
+.admin-edit-form-inner > .sketch-form-preview,
+.admin-edit-form-inner > div:last-child {
+  animation: formElementsIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.admin-edit-form-inner > .input-group:nth-child(1) {
+  animation-delay: 0.04s;
+}
+.admin-edit-form-inner > .input-group:nth-child(2) {
+  animation-delay: 0.08s;
+}
+.admin-edit-form-inner > .sketch-form-preview {
+  animation-delay: 0.12s;
+}
+.admin-edit-form-inner > div:last-child {
+  animation-delay: 0.16s;
+}
+
+@keyframes cardExpand {
+  0% {
+    max-height: 120px;
+  }
+  100% {
+    max-height: 800px;
+  }
+}
+
+@keyframes editFormIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes viewCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes formElementsIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .select-input {

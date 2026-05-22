@@ -183,96 +183,92 @@ function AdminSeedCard({
   onEdit,
   onDelete
 }) {
-  if (isEditing) {
-    return (
-      <form
-        onSubmit={onSave}
-        className="admin-token-card editing-mode"
-        style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
-      >
-        <div className="input-group">
-          <label htmlFor={`edit-title-${seedId}`} className="input-label">Titel</label>
-          <input
-            id={`edit-title-${seedId}`}
-            type="text"
-            className="text-input"
-            value={formTitle}
-            onChange={(e) => setFormTitle(e.target.value)}
-            placeholder="Voer een titel in..."
-            required
-          />
-        </div>
+  return (
+    <div className={`admin-token-card ${isEditing ? "editing-mode" : ""}`}>
+      {isEditing ? (
+        <form onSubmit={onSave} className="admin-edit-form-inner">
+          <div className="input-group">
+            <label htmlFor={`edit-title-${seedId}`} className="input-label">Titel</label>
+            <input
+              id={`edit-title-${seedId}`}
+              type="text"
+              className="text-input"
+              value={formTitle}
+              onChange={(e) => setFormTitle(e.target.value)}
+              placeholder="Voer een titel in..."
+              required
+            />
+          </div>
 
-        <div className="input-group">
-          <label htmlFor={`edit-desc-${seedId}`} className="input-label">Beschrijving</label>
-          <textarea
-            id={`edit-desc-${seedId}`}
-            className="text-input textarea-input"
-            style={{ minHeight: "100px" }}
-            value={formDescription}
-            onChange={(e) => setFormDescription(e.target.value)}
-            placeholder="Voeg optioneel details of context toe..."
-          />
-        </div>
+          <div className="input-group">
+            <label htmlFor={`edit-desc-${seedId}`} className="input-label">Beschrijving</label>
+            <textarea
+              id={`edit-desc-${seedId}`}
+              className="text-input textarea-input"
+              style={{ minHeight: "100px" }}
+              value={formDescription}
+              onChange={(e) => setFormDescription(e.target.value)}
+              placeholder="Voeg optioneel details of context toe..."
+            />
+          </div>
 
-        {formSketch && (
-          <div className="sketch-form-preview" style={{ width: "100%", position: "relative" }}>
-            <img src={formSketch} className="sketch-thumbnail-img" alt="Sketch preview" />
-            <button type="button" className="btn-remove-sketch" onClick={() => setFormSketch(null)}>
-              Verwijder schets
+          {formSketch && (
+            <div className="sketch-form-preview" style={{ width: "100%", position: "relative" }}>
+              <img src={formSketch} className="sketch-thumbnail-img" alt="Sketch preview" />
+              <button type="button" className="btn-remove-sketch" onClick={() => setFormSketch(null)}>
+                Verwijder schets
+              </button>
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem", width: "100%" }}>
+            <button type="submit" className="btn btn-primary btn-sm" style={{ flex: 1 }}>
+              Opslaan
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={onCancel}
+              style={{ flex: 1 }}
+            >
+              Annuleer
             </button>
           </div>
-        )}
-
-        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem", width: "100%" }}>
-          <button type="submit" className="btn btn-primary btn-sm" style={{ flex: 1 }}>
-            Opslaan
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={onCancel}
-            style={{ flex: 1 }}
-          >
-            Annuleer
-          </button>
-        </div>
-      </form>
-    );
-  }
-
-  return (
-    <div className="admin-token-card">
-      {/* ── Idea content ── */}
-      <div className="seed-card-content">
-        <div className="seed-card-title">{data.title}</div>
-        {data.description && (
-          <p className="seed-card-desc">{data.description}</p>
-        )}
-        {data.sketch && (
-          <div className="sketch-thumbnail-container" style={{ marginTop: "0.5rem" }}>
-            <img src={data.sketch} className="sketch-thumbnail-img" alt="Idea sketch" />
+        </form>
+      ) : (
+        <div className="admin-view-card-inner">
+          {/* ── Idea content ── */}
+          <div className="seed-card-content">
+            <div className="seed-card-title">{data.title}</div>
+            {data.description && (
+              <p className="seed-card-desc">{data.description}</p>
+            )}
+            {data.sketch && (
+              <div className="sketch-thumbnail-container" style={{ marginTop: "0.5rem" }}>
+                <img src={data.sketch} className="sketch-thumbnail-img" alt="Idea sketch" />
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* ── Actions ── */}
-      <div className="seed-card-actions">
-        <div style={{ display: "flex", gap: "0.5rem", width: "100%" }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => onEdit(data)} style={{ flex: 1 }}>
-            <Edit size={14} />
-            Bewerken
-          </button>
-          <button
-            className="btn btn-danger btn-sm"
-            onClick={() => onDelete(seedId)}
-            style={{ flex: 1 }}
-          >
-            <Trash2 size={14} />
-            Verwijderen
-          </button>
+          {/* ── Actions ── */}
+          <div className="seed-card-actions">
+            <div style={{ display: "flex", gap: "0.5rem", width: "100%" }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => onEdit(data)} style={{ flex: 1 }}>
+                <Edit size={14} />
+                Bewerken
+              </button>
+              <button
+                className="btn btn-danger btn-sm"
+                onClick={() => onDelete(seedId)}
+                style={{ flex: 1 }}
+              >
+                <Trash2 size={14} />
+                Verwijderen
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
