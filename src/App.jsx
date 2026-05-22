@@ -294,6 +294,8 @@ function App() {
   });
 
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [prevTab, setPrevTab] = useState(null);
+  const [slideDirection, setSlideDirection] = useState("forward");
   const isFirstRender = useRef(true);
 
   useEffect(() => {
@@ -301,28 +303,25 @@ function App() {
       isFirstRender.current = false;
       return;
     }
-    setIsTransitioning(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    // Scroll to top instantly to prevent layout jump while switching tabs
+    window.scrollTo(0, 0);
 
     const timer = setTimeout(() => {
       setIsTransitioning(false);
-    }, 500);
+      setPrevTab(null);
+    }, 400); // 400ms matching CSS animation duration
 
     return () => clearTimeout(timer);
   }, [activeTab]);
 
-  const handleTransitionEnd = (e) => {
-    if (e.target === e.currentTarget && e.propertyName === "transform") {
-      setIsTransitioning(false);
-    }
-  };
-
   const getTabClassName = (tabName) => {
-    if (activeTab === tabName) {
-      return "tab-screen-wrapper active";
+    if (tabName === activeTab) {
+      return isTransitioning
+        ? `tab-screen-wrapper entering dir-${slideDirection}`
+        : "tab-screen-wrapper active";
     }
-    if (isTransitioning) {
-      return "tab-screen-wrapper transitioning";
+    if (tabName === prevTab && isTransitioning) {
+      return `tab-screen-wrapper exiting dir-${slideDirection}`;
     }
     return "tab-screen-wrapper inactive";
   };
@@ -393,17 +392,28 @@ function App() {
   useEffect(() => {
     const handleLocationChange = () => {
       const path = window.location.pathname;
+      let targetTab = "new";
       if (path === "/admin" || path === "/manage") {
-        setActiveTab("ideas");
+        targetTab = "ideas";
       } else if (path === "/session") {
-        setActiveTab("session");
-      } else {
-        setActiveTab("new");
+        targetTab = "session";
+      }
+
+      if (targetTab !== activeTab) {
+        const tabIndices = { new: 0, ideas: 1, session: 2 };
+        const currentIndex = tabIndices[activeTab];
+        const nextIndex = tabIndices[targetTab];
+        const direction = nextIndex > currentIndex ? "forward" : "backward";
+
+        setPrevTab(activeTab);
+        setSlideDirection(direction);
+        setIsTransitioning(true);
+        setActiveTab(targetTab);
       }
     };
     window.addEventListener("popstate", handleLocationChange);
     return () => window.removeEventListener("popstate", handleLocationChange);
-  }, []);
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab === "ideas") {
@@ -414,7 +424,18 @@ function App() {
   }, [activeTab]);
 
   const handleTabChange = (tab) => {
+    if (tab === activeTab || isTransitioning) return;
+
+    const tabIndices = { new: 0, ideas: 1, session: 2 };
+    const currentIndex = tabIndices[activeTab];
+    const nextIndex = tabIndices[tab];
+    const direction = nextIndex > currentIndex ? "forward" : "backward";
+
+    setPrevTab(activeTab);
+    setSlideDirection(direction);
+    setIsTransitioning(true);
     setActiveTab(tab);
+
     setAdminSuccess(null);
     setAdminError(null);
     let path = "/";
@@ -644,11 +665,6 @@ function App() {
       )}
 
       <div className="tabs-viewport">
-        <div
-          className="tabs-slider"
-          style={{ transform: `translateX(-${(activeTab === "new" ? 0 : activeTab === "ideas" ? 1 : 2) * 33.3333}%)` }}
-          onTransitionEnd={handleTransitionEnd}
-        >
           {/* TAB A: NEW IDEA WIZARD */}
           <div className={getTabClassName("new")}>
             <main className="screen-container">
@@ -903,7 +919,6 @@ function App() {
               </div>
             </main>
           </div>
-        </div>
       </div>
 
       {/* Technical Offline/Sync Errors Subtle Footer Status */}

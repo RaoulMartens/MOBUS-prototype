@@ -3,8 +3,9 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  height: 100%;
-  overflow: hidden;
+  min-height: 100vh;
+  min-height: 100svh;
+  overflow-x: hidden;
   position: relative;
   padding: 1.5rem 1.5rem 7.5rem 1.5rem;
 }
@@ -1816,42 +1817,100 @@
    TAB SWIPE ANIMATIONS
    ============================================ */
 .tabs-viewport {
-  overflow-x: hidden;
+  position: relative;
   width: 100%;
   flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.tabs-slider {
-  display: flex;
-  width: 300%;
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: transform;
-  flex: 1;
+  overflow: hidden;
+  min-height: calc(100dvh - 9rem);
 }
 
 .tab-screen-wrapper {
-  width: 33.3333%;
-  height: 100%;
+  width: 100%;
+  min-height: calc(100dvh - 9rem);
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .tab-screen-wrapper.active {
+  position: relative;
+  visibility: visible;
   opacity: 1;
   pointer-events: auto;
 }
 
-.tab-screen-wrapper.transitioning {
-  opacity: 0.6;
-  pointer-events: none;
+.tab-screen-wrapper.inactive {
+  display: none;
 }
 
-.tab-screen-wrapper.inactive {
-  opacity: 0;
-  overflow: hidden;
+.tab-screen-wrapper.entering,
+.tab-screen-wrapper.exiting {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
   pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* Forward animations (sliding right-to-left) */
+.tab-screen-wrapper.entering.dir-forward {
+  animation: slideInForward 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.tab-screen-wrapper.exiting.dir-forward {
+  animation: slideOutForward 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Backward animations (sliding left-to-right) */
+.tab-screen-wrapper.entering.dir-backward {
+  animation: slideInBackward 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.tab-screen-wrapper.exiting.dir-backward {
+  animation: slideOutBackward 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Keyframes (subtle 20px slide distance) */
+@keyframes slideInForward {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutForward {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+}
+
+@keyframes slideInBackward {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutBackward {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(20px);
+  }
 }
