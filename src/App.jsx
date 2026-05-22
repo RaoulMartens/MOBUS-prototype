@@ -350,7 +350,7 @@ function App() {
   const [scannerSuccess, setScannerSuccess] = useState(null);
 
   // Connection
-  const [sessionId, setSessionId] = useState("mobus-001");
+  const [sessionId, setSessionId] = useState("mobus-tafel-88");
   const [tokensData, setTokensData] = useState({});
   const [dbError, setDbError] = useState(null);
 
@@ -523,6 +523,7 @@ function App() {
       const docRef = doc(db, "sessions", sessionId, "tokens", newSeedId);
       const num = seedNum(newSeedId);
       await setDoc(docRef, {
+        id: newSeedId,
         tokenId: newSeedId,
         seedId: newSeedId,
         displayNumber: num,
@@ -530,8 +531,10 @@ function App() {
         description: ideaDescription.trim(),
         sketch: currentSketchDataUrl || null,
         status: "active",
+        archived: false,
         source: "phone",
         cluster: null,
+        clusterId: null,
         position: { x: null, y: null },
         priority: null,
         createdAt: serverTimestamp(),
@@ -607,6 +610,7 @@ function App() {
       const num = seedNum(targetId);
 
       const payload = {
+        id: targetId,
         tokenId: targetId,
         seedId: targetId,
         displayNumber: num,
@@ -614,6 +618,7 @@ function App() {
         description: formDescription.trim(),
         sketch: formSketch,
         status: formStatus,
+        archived: formStatus === "archived",
         source: "admin",
         updatedAt: serverTimestamp()
       };
