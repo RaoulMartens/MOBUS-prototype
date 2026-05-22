@@ -61,15 +61,15 @@ body {
 
 #root {
   width: 100%;
-  min-height: 100vh;
-  min-height: 100svh;
+  height: 100vh;
+  height: 100svh;
   display: flex;
   flex-direction: column;
   background-color: var(--bg-secondary);
   border-left: 1px solid var(--border-color);
   border-right: 1px solid var(--border-color);
   box-shadow: var(--shadow-xl);
-  overflow-x: hidden;
+  overflow: hidden;
   margin: 0 auto;
   transition: max-width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }

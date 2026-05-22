@@ -3,8 +3,8 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 100vh;
-  min-height: 100svh;
+  height: 100%;
+  overflow: hidden;
   position: relative;
   padding: 1.5rem 1.5rem 7.5rem 1.5rem;
 }
@@ -1833,26 +1833,25 @@
 
 .tab-screen-wrapper {
   width: 33.3333%;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
   transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .tab-screen-wrapper.active {
   opacity: 1;
-  height: auto;
   pointer-events: auto;
 }
 
 .tab-screen-wrapper.transitioning {
   opacity: 0.6;
-  height: auto;
   pointer-events: none;
 }
 
 .tab-screen-wrapper.inactive {
   opacity: 0;
-  height: 0;
   overflow: hidden;
   pointer-events: none;
 }
