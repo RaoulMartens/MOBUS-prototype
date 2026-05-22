@@ -1870,11 +1870,11 @@
   animation: slideOutBackward 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Keyframes (subtle 20px slide distance) */
+/* Keyframes (full swipe slide distance) */
 @keyframes slideInForward {
   from {
     opacity: 0;
-    transform: translateX(20px);
+    transform: translateX(100%);
   }
   to {
     opacity: 1;
@@ -1889,14 +1889,14 @@
   }
   to {
     opacity: 0;
-    transform: translateX(-20px);
+    transform: translateX(-100%);
   }
 }
 
 @keyframes slideInBackward {
   from {
     opacity: 0;
-    transform: translateX(-20px);
+    transform: translateX(-100%);
   }
   to {
     opacity: 1;
@@ -1911,6 +1911,6 @@
   }
   to {
     opacity: 0;
-    transform: translateX(20px);
+    transform: translateX(100%);
   }
 }
