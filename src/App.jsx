@@ -9,7 +9,6 @@ import {
   serverTimestamp
 } from "firebase/firestore";
 import {
-  Database,
   Sparkles,
   CheckCircle2,
   AlertTriangle,
@@ -218,7 +217,6 @@ function AdminSeedCard({
 
         {formSketch && (
           <div className="sketch-form-preview" style={{ width: "100%", position: "relative" }}>
-            <div className="input-label" style={{ marginBottom: "0.25rem" }}>Gekoppelde schets</div>
             <img src={formSketch} className="sketch-thumbnail-img" alt="Sketch preview" />
             <button type="button" className="btn-remove-sketch" onClick={() => setFormSketch(null)}>
               Verwijder schets
@@ -228,8 +226,7 @@ function AdminSeedCard({
 
         <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem", width: "100%" }}>
           <button type="submit" className="btn btn-primary btn-sm" style={{ flex: 1 }}>
-            <Database size={14} />
-            Wijzigingen opslaan
+            Opslaan
           </button>
           <button
             type="button"
