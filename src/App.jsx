@@ -43,20 +43,58 @@ function SketchPad({ canvasRef, initialSketch, onDrawStart, onClear }) {
   const brushSize = 4;
   const [brushColor, setBrushColor] = useState("#ffffff");
 
+  const brushColorRef = useRef(brushColor);
+  useEffect(() => {
+    brushColorRef.current = brushColor;
+  }, [brushColor]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width || 400;
-    canvas.height = rect.height || 220;
-
     const context = canvas.getContext("2d");
+    contextRef.current = context;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width === 0 || height === 0) continue;
+
+        let tempImage = null;
+        try {
+          if (canvas.width > 0 && canvas.height > 0) {
+            tempImage = canvas.toDataURL();
+          }
+        } catch (e) {
+          console.error("Canvas export error on resize:", e);
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        context.lineCap = "round";
+        context.lineJoin = "round";
+        context.strokeStyle = brushColorRef.current;
+        context.lineWidth = brushSize;
+
+        if (tempImage) {
+          const img = new Image();
+          img.onload = () => context.drawImage(img, 0, 0);
+          img.src = tempImage;
+        } else if (initialSketch) {
+          const img = new Image();
+          img.onload = () => context.drawImage(img, 0, 0);
+          img.src = initialSketch;
+        }
+      }
+    });
+
+    resizeObserver.observe(canvas);
+
     context.lineCap = "round";
     context.lineJoin = "round";
     context.strokeStyle = brushColor;
     context.lineWidth = brushSize;
-    contextRef.current = context;
 
     if (initialSketch) {
       const img = new Image();
@@ -64,22 +102,9 @@ function SketchPad({ canvasRef, initialSketch, onDrawStart, onClear }) {
       img.src = initialSketch;
     }
 
-    const handleResize = () => {
-      const tempImage = canvas.toDataURL();
-      const r = canvas.getBoundingClientRect();
-      canvas.width = r.width || 400;
-      canvas.height = r.height || 220;
-      const img = new Image();
-      img.onload = () => context.drawImage(img, 0, 0);
-      img.src = tempImage;
-      context.lineCap = "round";
-      context.lineJoin = "round";
-      context.strokeStyle = brushColor;
-      context.lineWidth = brushSize;
+    return () => {
+      resizeObserver.disconnect();
     };
-
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
   }, [initialSketch]);
 
   useEffect(() => {
@@ -184,7 +209,7 @@ function AdminSeedCard({
   onDelete
 }) {
   return (
-    <div className={`admin-token-card ${isEditing ? "editing-mode" : ""}`}>
+    <div className={`admin-token-card ${isEditing ? "editing-mode" : ""} ${data.sketch ? "has-sketch" : ""}`}>
       {isEditing ? (
         <form onSubmit={onSave} className="admin-edit-form-inner">
           <div className="input-group">
@@ -337,6 +362,7 @@ function App() {
   const [hasSketch, setHasSketch] = useState(false);
   const [sketchDataUrl, setSketchDataUrl] = useState(null);
   const [showSketch, setShowSketch] = useState(false);
+  const [formResetKey, setFormResetKey] = useState(0);
 
   // --- TAB B: ADMIN ---
   const [adminError, setAdminError] = useState(null);
@@ -481,7 +507,7 @@ function App() {
     const newSeedId = getNextSeedId();
 
     let currentSketchDataUrl = sketchDataUrl;
-    if (hasSketch && canvasRef.current) {
+    if (showSketch && hasSketch && canvasRef.current) {
       try {
         currentSketchDataUrl = canvasRef.current.toDataURL("image/png");
         setSketchDataUrl(currentSketchDataUrl);
@@ -526,6 +552,7 @@ function App() {
     setSketchDataUrl(null);
     setShowSketch(false);
     setDbError(null);
+    setFormResetKey((prev) => prev + 1);
     setUserWizardStep("idea");
   };
 
@@ -717,14 +744,15 @@ function App() {
                       {showSketch ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                     </button>
 
-                    {showSketch && (
+                    <div className={`sketch-pad-wrapper ${showSketch ? "expanded" : ""}`}>
                       <SketchPad
+                        key={formResetKey}
                         canvasRef={canvasRef}
                         initialSketch={sketchDataUrl}
                         onDrawStart={() => setHasSketch(true)}
                         onClear={() => { setHasSketch(false); setSketchDataUrl(null); }}
                       />
-                    )}
+                    </div>
                   </div>
 
                   <button
