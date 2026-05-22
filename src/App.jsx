@@ -293,6 +293,40 @@ function App() {
     return "new";
   });
 
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const isFirstRender = useRef(true);
+
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    setIsTransitioning(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    const timer = setTimeout(() => {
+      setIsTransitioning(false);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [activeTab]);
+
+  const handleTransitionEnd = (e) => {
+    if (e.target === e.currentTarget && e.propertyName === "transform") {
+      setIsTransitioning(false);
+    }
+  };
+
+  const getTabClassName = (tabName) => {
+    if (activeTab === tabName) {
+      return "tab-screen-wrapper active";
+    }
+    if (isTransitioning) {
+      return "tab-screen-wrapper transitioning";
+    }
+    return "tab-screen-wrapper inactive";
+  };
+
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showScanner, setShowScanner] = useState(false);
@@ -609,266 +643,268 @@ function App() {
         </div>
       )}
 
-      {/* ─────────────────────────────────────
-          TAB A: NEW IDEA WIZARD
-      ───────────────────────────────────── */}
-      {activeTab === "new" && (
-        <main className="screen-container">
-          {/* Step 1: Input form */}
-          {userWizardStep === "idea" && (
-            <div className="card">
-              <h2 className="card-title">Wat wil je inbrengen?</h2>
-              <p className="card-description">
-                Schrijf een gedachte, vraag of inzicht. Je input verschijnt als digitale seed op de interactieve tafel.
-              </p>
+      <div className="tabs-viewport">
+        <div
+          className="tabs-slider"
+          style={{ transform: `translateX(-${(activeTab === "new" ? 0 : activeTab === "ideas" ? 1 : 2) * 33.3333}%)` }}
+          onTransitionEnd={handleTransitionEnd}
+        >
+          {/* TAB A: NEW IDEA WIZARD */}
+          <div className={getTabClassName("new")}>
+            <main className="screen-container">
+              {/* Step 1: Input form */}
+              {userWizardStep === "idea" && (
+                <div className="card">
+                  <h2 className="card-title">Wat wil je inbrengen?</h2>
+                  <p className="card-description">
+                    Schrijf een gedachte, vraag of inzicht. Je input verschijnt als digitale seed op de interactieve tafel.
+                  </p>
 
-              {!isConfigured && (
-                <div className="error-banner">
-                  <AlertTriangle size={18} style={{ flexShrink: 0 }} />
-                  <div>
-                    <div className="error-title">Firebase Config Alert</div>
-                    Firebase is nog niet geconfigureerd. Je kan de UI testen, maar database opslag is inactief.
+                  {!isConfigured && (
+                    <div className="error-banner">
+                      <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+                      <div>
+                        <div className="error-title">Firebase Config Alert</div>
+                        Firebase is nog niet geconfigureerd. Je kan de UI testen, maar database opslag is inactief.
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="input-group">
+                    <label htmlFor="idea-title" className="input-label">Titel</label>
+                    <input
+                      id="idea-title"
+                      type="text"
+                      className="text-input"
+                      value={ideaTitle}
+                      onChange={(e) => setIdeaTitle(e.target.value)}
+                      placeholder="Bijv. Robot als creatieve teamgenoot"
+                    />
+                  </div>
+
+                  <div className="input-group">
+                    <label htmlFor="idea-desc" className="input-label">
+                      Toelichting <span className="optional-tag">(optioneel)</span>
+                    </label>
+                    <textarea
+                      id="idea-desc"
+                      className="text-input textarea-input"
+                      style={{ minHeight: "80px" }}
+                      value={ideaDescription}
+                      onChange={(e) => setIdeaDescription(e.target.value)}
+                      placeholder="Voeg optioneel context of voorbeelden toe..."
+                    />
+                  </div>
+
+                  {/* Optionele schets – inklapbaar */}
+                  <div className="sketch-toggle-section">
+                    <button
+                      type="button"
+                      className="sketch-toggle-btn"
+                      onClick={() => setShowSketch(!showSketch)}
+                    >
+                      <Pencil size={14} />
+                      Schets toevoegen <span className="optional-tag">(optioneel)</span>
+                      {showSketch ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </button>
+
+                    {showSketch && (
+                      <SketchPad
+                        canvasRef={canvasRef}
+                        initialSketch={sketchDataUrl}
+                        onDrawStart={() => setHasSketch(true)}
+                        onClear={() => { setHasSketch(false); setSketchDataUrl(null); }}
+                      />
+                    )}
+                  </div>
+
+                  <button
+                    id="plant-on-table-btn"
+                    className="btn btn-primary"
+                    onClick={handleUserSubmit}
+                    disabled={!ideaTitle.trim()}
+                    style={{ marginTop: "0.5rem" }}
+                  >
+                    <Sparkles size={18} />
+                    Plaats op tafel
+                  </button>
+                </div>
+              )}
+
+              {/* Step 2: Loading */}
+              {userWizardStep === "submitting" && (
+                <div className="card">
+                  <div className="loading-container">
+                    <div className="spinner" />
+                    <span className="loading-text">Je idee wordt verzonden...</span>
                   </div>
                 </div>
               )}
 
-              <div className="input-group">
-                <label htmlFor="idea-title" className="input-label">Titel</label>
-                <input
-                  id="idea-title"
-                  type="text"
-                  className="text-input"
-                  value={ideaTitle}
-                  onChange={(e) => setIdeaTitle(e.target.value)}
-                  placeholder="Bijv. Robot als creatieve teamgenoot"
-                />
-              </div>
+              {/* Step 3: Success */}
+              {userWizardStep === "success" && (
+                <div className="card success-card">
+                  <div className="success-icon-wrapper success-pulse">
+                    <CheckCircle2 size={36} />
+                  </div>
 
-              <div className="input-group">
-                <label htmlFor="idea-desc" className="input-label">
-                  Toelichting <span className="optional-tag">(optioneel)</span>
-                </label>
-                <textarea
-                  id="idea-desc"
-                  className="text-input textarea-input"
-                  style={{ minHeight: "80px" }}
-                  value={ideaDescription}
-                  onChange={(e) => setIdeaDescription(e.target.value)}
-                  placeholder="Voeg optioneel context of voorbeelden toe..."
-                />
-              </div>
+                  <h2 className="card-title success-headline">Je idee is geplaatst</h2>
 
-              {/* Optionele schets – inklapbaar */}
-              <div className="sketch-toggle-section">
-                <button
-                  type="button"
-                  className="sketch-toggle-btn"
-                  onClick={() => setShowSketch(!showSketch)}
-                >
-                  <Pencil size={14} />
-                  Schets toevoegen <span className="optional-tag">(optioneel)</span>
-                  {showSketch ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </button>
+                  <div className="success-instruction success-instruction-prominent">
+                    <span className="success-instruction-icon">💡</span>
+                    Je idee verschijnt nu direct op de interactieve tafel.
+                  </div>
 
-                {showSketch && (
-                  <SketchPad
-                    canvasRef={canvasRef}
-                    initialSketch={sketchDataUrl}
-                    onDrawStart={() => setHasSketch(true)}
-                    onClear={() => { setHasSketch(false); setSketchDataUrl(null); }}
-                  />
-                )}
-              </div>
+                  <div className="success-instruction-secondary">
+                    Orden dit idee straks samen met andere ideeën op de tafel — verschuif, cluster en verbind.
+                  </div>
 
-              <button
-                id="plant-on-table-btn"
-                className="btn btn-primary"
-                onClick={handleUserSubmit}
-                disabled={!ideaTitle.trim()}
-                style={{ marginTop: "0.5rem" }}
-              >
-                <Sparkles size={18} />
-                Plaats op tafel
-              </button>
-            </div>
-          )}
+                  <div className="success-idea-summary">
+                    <div className="input-label" style={{ marginBottom: "0.4rem" }}>Jouw inbreng:</div>
+                    <div className="success-idea-title">{ideaTitle}</div>
+                    {ideaDescription && (
+                      <p className="idea-preview" style={{ marginTop: "0.35rem", fontStyle: "normal" }}>
+                        {ideaDescription}
+                      </p>
+                    )}
+                    {sketchDataUrl && (
+                      <div className="sketch-thumbnail-container" style={{ width: "100%", marginTop: "0.5rem" }}>
+                        <img src={sketchDataUrl} className="sketch-thumbnail-img" alt="Gekoppelde schets" />
+                      </div>
+                    )}
+                  </div>
 
-          {/* Step 2: Loading */}
-          {userWizardStep === "submitting" && (
-            <div className="card">
-              <div className="loading-container">
-                <div className="spinner" />
-                <span className="loading-text">Je idee wordt verzonden...</span>
-              </div>
-            </div>
-          )}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", width: "100%" }}>
+                    <button id="add-another-idea-btn" className="btn btn-primary" onClick={handleAddAnotherIdea}>
+                      <RefreshCw size={18} />
+                      Nog een idee toevoegen
+                    </button>
+                    <button className="btn btn-secondary" onClick={handleGoToManage}>
+                      <Settings size={18} />
+                      Ga naar ideeënbeheer
+                    </button>
+                  </div>
+                </div>
+              )}
+            </main>
+          </div>
 
-          {/* Step 3: Success */}
-          {userWizardStep === "success" && (
-            <div className="card success-card">
-              <div className="success-icon-wrapper success-pulse">
-                <CheckCircle2 size={36} />
-              </div>
+          {/* TAB B: IDEAS OVERVIEW (ADMIN) */}
+          <div className={getTabClassName("ideas")}>
+            <main className="admin-layout">
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
 
-              <h2 className="card-title success-headline">Je idee is geplaatst</h2>
-
-              <div className="success-instruction success-instruction-prominent">
-                <span className="success-instruction-icon">💡</span>
-                Je idee verschijnt nu direct op de interactieve tafel.
-              </div>
-
-              <div className="success-instruction-secondary">
-                Orden dit idee straks samen met andere ideeën op de tafel — verschuif, cluster en verbind.
-              </div>
-
-              <div className="success-idea-summary">
-                <div className="input-label" style={{ marginBottom: "0.4rem" }}>Jouw inbreng:</div>
-                <div className="success-idea-title">{ideaTitle}</div>
-                {ideaDescription && (
-                  <p className="idea-preview" style={{ marginTop: "0.35rem", fontStyle: "normal" }}>
-                    {ideaDescription}
-                  </p>
-                )}
-                {sketchDataUrl && (
-                  <div className="sketch-thumbnail-container" style={{ width: "100%", marginTop: "0.5rem" }}>
-                    <img src={sketchDataUrl} className="sketch-thumbnail-img" alt="Gekoppelde schets" />
+                {/* Feedback banners */}
+                {adminSuccess && (
+                  <div className="error-banner" style={{ backgroundColor: "var(--success-glow)", borderColor: "var(--success)" }}>
+                    <CheckCircle2 size={18} color="var(--success)" style={{ flexShrink: 0 }} />
+                    <span style={{ color: "var(--text-primary)" }}>{adminSuccess}</span>
                   </div>
                 )}
+
+                {/* Empty state */}
+                {sortedSeeds.length === 0 ? (
+                  <div className="admin-empty-state">
+                    <div className="admin-empty-icon">💡</div>
+                    <h3 className="admin-empty-title">Nog geen ideeën toegevoegd</h3>
+                    <p className="admin-empty-desc">
+                      Er zijn nog geen ideeën toegevoegd aan deze sessie. Zodra je een idee toevoegt, verschijnt het hier.
+                    </p>
+                    <button
+                      className="btn btn-primary"
+                      style={{ marginTop: "0.5rem" }}
+                      onClick={() => handleTabChange("new")}
+                    >
+                      <Plus size={16} />
+                      Idee toevoegen
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {/* Section header */}
+                    <div className="admin-section-header">
+                      <div>
+                        <h2 className="admin-section-title">Toegevoegde ideeën</h2>
+                        <p className="admin-section-sub">Hier zie je alle ideeën die in deze sessie zijn toegevoegd.</p>
+                      </div>
+                      <span className="admin-seed-count">{sortedSeeds.length}</span>
+                    </div>
+
+                    <div className="admin-card-list">
+                      {sortedSeeds.map(([id, data]) => (
+                        <AdminSeedCard
+                          key={id}
+                          seedId={id}
+                          data={data}
+                          isEditing={isEditing && formSeedId === id}
+                          formTitle={formTitle}
+                          formDescription={formDescription}
+                          formSketch={formSketch}
+                          setFormTitle={setFormTitle}
+                          setFormDescription={setFormDescription}
+                          setFormSketch={setFormSketch}
+                          onSave={handleAdminSave}
+                          onCancel={resetAdminForm}
+                          onEdit={(d) => handleEditClick(d)}
+                          onDelete={(id) => handlePermanentDelete(id, data.title)}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
+            </main>
+          </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", width: "100%" }}>
-                <button id="add-another-idea-btn" className="btn btn-primary" onClick={handleAddAnotherIdea}>
-                  <RefreshCw size={18} />
-                  Nog een idee toevoegen
-                </button>
-                <button className="btn btn-secondary" onClick={handleGoToManage}>
-                  <Settings size={18} />
-                  Ga naar ideeënbeheer
-                </button>
-              </div>
-            </div>
-          )}
-        </main>
-      )}
-
-      {/* ─────────────────────────────────────
-           TAB B: IDEAS OVERVIEW (ADMIN)
-       ───────────────────────────────────── */}
-      {activeTab === "ideas" && (
-        <main className="admin-layout">
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-
-            {/* Feedback banners */}
-            {adminSuccess && (
-              <div className="error-banner" style={{ backgroundColor: "var(--success-glow)", borderColor: "var(--success)" }}>
-                <CheckCircle2 size={18} color="var(--success)" style={{ flexShrink: 0 }} />
-                <span style={{ color: "var(--text-primary)" }}>{adminSuccess}</span>
-              </div>
-            )}
-
-            {/* Empty state */}
-            {sortedSeeds.length === 0 ? (
-              <div className="admin-empty-state">
-                <div className="admin-empty-icon">💡</div>
-                <h3 className="admin-empty-title">Nog geen ideeën toegevoegd</h3>
-                <p className="admin-empty-desc">
-                  Er zijn nog geen ideeën toegevoegd aan deze sessie. Zodra je een idee toevoegt, verschijnt het hier.
+          {/* TAB C: SESSION MANAGEMENT */}
+          <div className={getTabClassName("session")}>
+            <main className="screen-container">
+              <div className="card">
+                <h2 className="card-title">Sessiebeheer</h2>
+                <p className="card-description">
+                  Beheer de actieve sessie om verbinding te maken met de interactieve tafel.
                 </p>
-                <button
-                  className="btn btn-primary"
-                  style={{ marginTop: "0.5rem" }}
-                  onClick={() => handleTabChange("new")}
-                >
-                  <Plus size={16} />
-                  Idee toevoegen
-                </button>
-              </div>
-            ) : (
-              <>
-                {/* Section header */}
-                <div className="admin-section-header">
-                  <div>
-                    <h2 className="admin-section-title">Toegevoegde ideeën</h2>
-                    <p className="admin-section-sub">Hier zie je alle ideeën die in deze sessie zijn toegevoegd.</p>
-                  </div>
-                  <span className="admin-seed-count">{sortedSeeds.length}</span>
-                </div>
 
-                <div className="admin-card-list">
-                  {sortedSeeds.map(([id, data]) => (
-                    <AdminSeedCard
-                      key={id}
-                      seedId={id}
-                      data={data}
-                      isEditing={isEditing && formSeedId === id}
-                      formTitle={formTitle}
-                      formDescription={formDescription}
-                      formSketch={formSketch}
-                      setFormTitle={setFormTitle}
-                      setFormDescription={setFormDescription}
-                      setFormSketch={setFormSketch}
-                      onSave={handleAdminSave}
-                      onCancel={resetAdminForm}
-                      onEdit={(d) => handleEditClick(d)}
-                      onDelete={(id) => handlePermanentDelete(id, data.title)}
+                <div className="input-group">
+                  <label htmlFor="session-id-input" className="input-label">Sessiecode handmatig invoeren</label>
+                  <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                    <KeyRound size={18} color="#64748b" style={{ position: "absolute", left: "12px" }} />
+                    <input
+                      id="session-id-input"
+                      type="text"
+                      className="text-input"
+                      style={{ width: "100%", paddingLeft: "2.5rem" }}
+                      value={sessionId}
+                      onChange={(e) => setSessionId(e.target.value)}
+                      placeholder="mobus-001"
                     />
-                  ))}
+                  </div>
                 </div>
-              </>
-            )}
-          </div>
-        </main>
-      )}
 
-      {/* ─────────────────────────────────────
-           TAB C: SESSION MANAGEMENT
-       ───────────────────────────────────── */}
-      {activeTab === "session" && (
-        <main className="screen-container">
-          <div className="card">
-            <h2 className="card-title">Sessiebeheer</h2>
-            <p className="card-description">
-              Beheer de actieve sessie om verbinding te maken met de interactieve tafel.
-            </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginTop: "0.5rem" }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={handleStartSimulatedScanner}
+                  >
+                    <QrCode size={18} />
+                    Scan QR-code
+                  </button>
 
-            <div className="input-group">
-              <label htmlFor="session-id-input" className="input-label">Sessiecode handmatig invoeren</label>
-              <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                <KeyRound size={18} color="#64748b" style={{ position: "absolute", left: "12px" }} />
-                <input
-                  id="session-id-input"
-                  type="text"
-                  className="text-input"
-                  style={{ width: "100%", paddingLeft: "2.5rem" }}
-                  value={sessionId}
-                  onChange={(e) => setSessionId(e.target.value)}
-                  placeholder="mobus-001"
-                />
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleGenerateSession}
+                  >
+                    <Plus size={18} />
+                    Start nieuwe sessie
+                  </button>
+                </div>
               </div>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginTop: "0.5rem" }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={handleStartSimulatedScanner}
-              >
-                <QrCode size={18} />
-                Scan QR-code
-              </button>
-
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleGenerateSession}
-              >
-                <Plus size={18} />
-                Start nieuwe sessie
-              </button>
-            </div>
+            </main>
           </div>
-        </main>
-      )}
+        </div>
+      </div>
 
       {/* Technical Offline/Sync Errors Subtle Footer Status */}
       {(!isOnline || dbError || adminError) && (

@@ -71,6 +71,7 @@ body {
   box-shadow: var(--shadow-xl);
   overflow-x: hidden;
   margin: 0 auto;
+  transition: max-width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* User route mobile constraint */

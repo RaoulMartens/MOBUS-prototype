@@ -1636,3 +1636,223 @@
     transform: translate(-50%, 0);
   }
 }
+
+/* Startup Flow / Onboarding */
+.startflow-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80vh;
+  min-height: 80svh;
+  padding: 1rem;
+}
+
+.startflow-card {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  box-shadow: var(--shadow-xl), 0 0 40px rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.2);
+  transition: all 0.3s ease;
+  animation: fadeIn 0.5s ease-out;
+}
+
+.startflow-logo-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+.startflow-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-full);
+  background: radial-gradient(circle, var(--accent) 0%, var(--accent-hover) 100%);
+  color: var(--text-primary);
+  margin-bottom: 1.25rem;
+  box-shadow: 0 0 20px var(--accent-glow), inset 0 2px 4px rgba(255, 255, 255, 0.2);
+  animation: pulseGlow 3s infinite ease-in-out;
+}
+
+.startflow-logo-icon {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+.startflow-title {
+  font-size: 2.25rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, #ffffff 0%, #a5b4fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 0.25rem;
+}
+
+.startflow-subtitle {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.startflow-choices, 
+.startflow-join-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+}
+
+.btn-startflow {
+  height: 52px;
+  font-size: 1.05rem;
+  box-shadow: var(--shadow-md);
+}
+
+.startflow-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0.5rem 0;
+}
+
+.startflow-divider::before,
+.startflow-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.startflow-divider:not(:empty)::before {
+  margin-right: .75em;
+}
+
+.startflow-divider:not(:empty)::after {
+  margin-left: .75em;
+}
+
+.startflow-previous-session {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.btn-link-session {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.5rem;
+  transition: all 0.2s ease;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.btn-link-session:hover {
+  color: var(--accent-hover);
+  text-shadow: 0 0 8px var(--accent-glow);
+}
+
+.btn-back-link {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  align-self: center;
+  padding: 0.5rem;
+  transition: color 0.2s ease;
+}
+
+.btn-back-link:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.startflow-section-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: center;
+  margin-bottom: 0.25rem;
+}
+
+.startflow-section-desc {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.5;
+  margin-bottom: 0.75rem;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px var(--accent-glow), inset 0 2px 4px rgba(255, 255, 255, 0.2);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(99, 102, 241, 0.45), inset 0 2px 4px rgba(255, 255, 255, 0.2);
+    transform: scale(1.03);
+  }
+}
+
+/* ============================================
+   TAB SWIPE ANIMATIONS
+   ============================================ */
+.tabs-viewport {
+  overflow-x: hidden;
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.tabs-slider {
+  display: flex;
+  width: 300%;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+  flex: 1;
+}
+
+.tab-screen-wrapper {
+  width: 33.3333%;
+  display: flex;
+  flex-direction: column;
+  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tab-screen-wrapper.active {
+  opacity: 1;
+  height: auto;
+  pointer-events: auto;
+}
+
+.tab-screen-wrapper.transitioning {
+  opacity: 0.6;
+  height: auto;
+  pointer-events: none;
+}
+
+.tab-screen-wrapper.inactive {
+  opacity: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
