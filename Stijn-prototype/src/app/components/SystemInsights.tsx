@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useTokens } from '../contexts/TokenContext';
-import { Card, CardContent } from '../../imports/card';
-import { Badge } from '../../imports/badge';
-import { Button } from '../../imports/button';
+import { Card, CardContent } from './ui/card';
+import { Badge } from './ui/badge';
+import { Button } from './ui/button';
 
 export function SystemInsights() {
   const { tokens, clusters, events, loading, backendConnected, addEvent } = useTokens();

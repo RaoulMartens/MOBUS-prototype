@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useTokens } from '../contexts/TokenContext';
-import { Card, CardContent } from '../../imports/card';
-import { Button } from '../../imports/button';
-import { Badge } from '../../imports/badge';
+import { Card, CardContent } from './ui/card';
+import { Button } from './ui/button';
+import { Badge } from './ui/badge';
 
 export function IdeaGarden() {
   const { tokens, updateTokenText, updateTokenDescription, deleteToken, deleteAllTokens, addToken, loading, backendConnected } = useTokens();
