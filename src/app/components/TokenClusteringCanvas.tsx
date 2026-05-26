@@ -81,6 +81,103 @@ const generateRelationLabel = (titleA: string, titleB: string): string => {
   return suggestions[index];
 };
 
+interface SuggestedRelation {
+  sourceId: string;
+  targetId: string;
+  score: number;
+  reason?: string;
+  state: "suggested" | "confirmed" | "dismissed";
+}
+
+const STOP_WORDS = new Set([
+  'aan', 'als', 'bij', 'dat', 'de', 'deze', 'die', 'dit', 'door', 'een', 'en',
+  'er', 'het', 'hier', 'hoe', 'in', 'is', 'kan', 'met', 'naar', 'niet', 'nog',
+  'om', 'op', 'te', 'tot', 'uit', 'van', 'voor', 'wat', 'we', 'wel', 'zijn',
+  'the', 'and', 'for', 'from', 'that', 'this', 'with',
+]);
+
+const THEME_RULES = [
+  {
+    label: 'Mensgerichte Technologie',
+    keywords: ['ai', 'robot', 'technologie', 'tech', 'digitaal', 'systeem', 'data', 'automatisering', 'mens', 'team'],
+  },
+  {
+    label: 'Veilige en Eerlijke Keuzes',
+    keywords: ['ethiek', 'veilig', 'risico', 'privacy', 'vertrouwen', 'eerlijk', 'transparant', 'controle'],
+  },
+  {
+    label: 'Samenwerking en Eigenaarschap',
+    keywords: ['samen', 'team', 'groep', 'community', 'deelname', 'participatie', 'co-creatie', 'eigenaarschap'],
+  },
+  {
+    label: 'Duurzame Impact',
+    keywords: ['duurzaam', 'milieu', 'impact', 'circulair', 'energie', 'klimaat', 'toekomst', 'sociaal'],
+  },
+  {
+    label: 'Leren en Experimenteren',
+    keywords: ['leren', 'onderwijs', 'training', 'experiment', 'prototype', 'testen', 'feedback', 'onderzoek'],
+  },
+  {
+    label: 'Toegankelijke Ervaring',
+    keywords: ['toegankelijk', 'ervaring', 'gebruiker', 'gebruikers', 'interface', 'simpel', 'duidelijk', 'inclusief'],
+  },
+];
+
+function normalizeWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .map(word => word.trim())
+    .filter(word => word.length >= 3 && !STOP_WORDS.has(word));
+}
+
+function calculateSemanticScore(textA: string, descA: string, textB: string, descB: string): number {
+  const wordsA = normalizeWords(`${textA} ${descA}`);
+  const wordsB = normalizeWords(`${textB} ${descB}`);
+  if (wordsA.length === 0 || wordsB.length === 0) return 0;
+
+  // Jaccard similarity of normalized words
+  const setA = new Set(wordsA);
+  const setB = new Set(wordsB);
+  let intersection = 0;
+  setA.forEach(w => {
+    if (setB.has(w)) intersection++;
+  });
+  const union = setA.size + setB.size - intersection;
+  const jaccard = union > 0 ? intersection / union : 0;
+
+  // Thematic rules match
+  let thematicMatch = false;
+  for (const theme of THEME_RULES) {
+    const hasA = theme.keywords.some(keyword => 
+      wordsA.some(w => w.includes(keyword) || keyword.includes(w))
+    );
+    const hasB = theme.keywords.some(keyword => 
+      wordsB.some(w => w.includes(keyword) || keyword.includes(w))
+    );
+    if (hasA && hasB) {
+      thematicMatch = true;
+      break;
+    }
+  }
+
+  // Base score calculation
+  let score = jaccard * 0.65;
+  if (thematicMatch) score += 0.45;
+
+  // Boost exact title keyword overlap
+  const titleA = normalizeWords(textA);
+  const titleB = normalizeWords(textB);
+  titleA.forEach(w => {
+    if (titleB.includes(w)) score += 0.25;
+  });
+
+  return Math.min(score, 1.0);
+}
+
 export function TokenClusteringCanvas() {
   const {
     tokens: dbTokens,
@@ -117,6 +214,14 @@ export function TokenClusteringCanvas() {
     y: number;
     type: 'snap' | 'unsnap';
     createdAt: number;
+  }>>([]);
+  const [suggestionLines, setSuggestionLines] = useState<Array<{
+    id: string;
+    sourceId: string;
+    targetId: string;
+    score: number;
+    currentOpacity: number;
+    isLeaving: boolean;
   }>>([]);
   const prevConnectionsRef = useRef<string[]>([]);
   const isFirstRender = useRef(true);
@@ -382,6 +487,100 @@ export function TokenClusteringCanvas() {
       });
     }
   }, [loading, dbTokens.length, sessionId, addToken]);
+
+  // Suggested relations tracking & scoring
+  useEffect(() => {
+    const activeList: Array<{ id: string; sourceId: string; targetId: string; score: number }> = [];
+
+    // Pairwise comparison of all canvas tokens
+    for (let i = 0; i < canvasTokens.length; i++) {
+      for (let j = i + 1; j < canvasTokens.length; j++) {
+        const t1 = canvasTokens[i];
+        const t2 = canvasTokens[j];
+
+        const d = getDistance(t1.x, t1.y, t2.x, t2.y);
+        // Suggested lines disappear if they get snapped (d < SNAP_DISTANCE) or if they are dragged too far (d > 380)
+        if (d < SNAP_DISTANCE || d > 380) continue;
+
+        const score = calculateSemanticScore(t1.label, t1.description, t2.label, t2.description);
+        if (score > 0.75) {
+          activeList.push({
+            id: [t1.id, t2.id].sort().join('-'),
+            sourceId: t1.id,
+            targetId: t2.id,
+            score
+          });
+        }
+      }
+    }
+
+    // Sort by score descending and take top 3 suggestions
+    const top3 = activeList.sort((a, b) => b.score - a.score).slice(0, 3);
+    const top3Ids = new Set(top3.map(s => s.id));
+
+    setSuggestionLines(prev => {
+      const updated = [...prev];
+
+      // Update existing entries and mark leaving entries
+      updated.forEach(line => {
+        if (top3Ids.has(line.id)) {
+          const match = top3.find(s => s.id === line.id)!;
+          line.score = match.score;
+          line.isLeaving = false;
+        } else {
+          line.isLeaving = true;
+        }
+      });
+
+      // Add new entries
+      top3.forEach(line => {
+        if (!updated.some(l => l.id === line.id)) {
+          updated.push({
+            id: line.id,
+            sourceId: line.sourceId,
+            targetId: line.targetId,
+            score: line.score,
+            currentOpacity: 0, // start from 0 to fade-in
+            isLeaving: false
+          });
+        }
+      });
+
+      return updated;
+    });
+  }, [canvasTokens, connections]);
+
+  // Animating tick loop for smooth opacity transitions
+  useEffect(() => {
+    let animId: number;
+
+    const tick = () => {
+      setSuggestionLines(prev => {
+        let changed = false;
+        const next = prev.map(line => {
+          const target = line.isLeaving ? 0 : 1;
+          const diff = target - line.currentOpacity;
+
+          if (Math.abs(diff) > 0.01) {
+            changed = true;
+            return {
+              ...line,
+              currentOpacity: line.currentOpacity + diff * 0.12
+            };
+          }
+          return line;
+        }).filter(line => !(line.isLeaving && line.currentOpacity < 0.05));
+
+        if (next.length !== prev.length) changed = true;
+        return changed ? next : prev;
+      });
+
+      animId = requestAnimationFrame(tick);
+    };
+
+    animId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animId);
+  }, []);
 
   // Track mouse position
   useEffect(() => {
@@ -738,6 +937,51 @@ export function TokenClusteringCanvas() {
 
         {/* Connection lines */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
+          <defs>
+            <filter id="subtle-glow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+          </defs>
+
+          {/* Dynamic Suggested Relations */}
+          {suggestionLines.map((line) => {
+            const token1 = canvasTokens.find((t) => t.id === line.sourceId);
+            const token2 = canvasTokens.find((t) => t.id === line.targetId);
+            if (!token1 || !token2) return null;
+
+            const d = getDistance(token1.x, token1.y, token2.x, token2.y);
+            // Linear fade out as tokens are pulled apart (between 140px and 380px)
+            const distanceFade = Math.max(0, Math.min(1, 1 - (d - 140) / (380 - 140)));
+            const opacity = line.currentOpacity * distanceFade * line.score * 0.35;
+
+            if (opacity < 0.01) return null;
+
+            return (
+              <g
+                key={`suggested-${line.id}`}
+                className="suggested-relation-group"
+                style={{
+                  opacity,
+                  transition: 'opacity 0.2s ease-out',
+                }}
+              >
+                <line
+                  x1={token1.x}
+                  y1={token1.y}
+                  x2={token2.x}
+                  y2={token2.y}
+                  stroke="#10b981"
+                  strokeWidth="1.5"
+                  strokeDasharray="4,3"
+                  style={{
+                    filter: 'url(#subtle-glow)',
+                  }}
+                />
+              </g>
+            );
+          })}
+
           {/* Subtle proximity preview lines - hidden when any focus is active */}
           {!isAnyFocus && proximityLines.map(({ from, to }, index) => {
             const token1 = canvasTokens.find((t) => t.id === from);
@@ -1194,6 +1438,13 @@ export function TokenClusteringCanvas() {
             transform: translate(-50%, -50%) scale(1.02);
             opacity: 0.95;
           }
+        }
+        .suggested-relation-group {
+          animation: suggestionPulse 2.5s infinite ease-in-out;
+        }
+        @keyframes suggestionPulse {
+          0%, 100% { opacity: 0.6; }
+          50% { opacity: 1.0; }
         }
       `}</style>
     </div>
