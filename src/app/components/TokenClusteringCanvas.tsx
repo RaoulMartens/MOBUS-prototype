@@ -1,8 +1,6 @@
 import { useState, useRef, useEffect, useMemo, type MouseEvent as ReactMouseEvent } from 'react';
 import { Token } from './Token';
 import { useTokens } from '../contexts/TokenContext';
-import { Card, CardContent } from './ui/card';
-import { Sparkles } from 'lucide-react';
 import { TableEmptyState } from './TableEmptyState';
 
 interface CanvasToken {
@@ -205,7 +203,6 @@ export function TokenClusteringCanvas() {
   // Progressive Disclosure states
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [selectedRelationKey, setSelectedRelationKey] = useState<string | null>(null);
-  const [aiPrompt, setAiPrompt] = useState<AIPrompt | null>(null);
 
   useEffect(() => {
     document.title = "MOBUS - Tafelscherm";
@@ -691,67 +688,7 @@ export function TokenClusteringCanvas() {
   }, [canvasTokens.length, updateTokenPosition]);
 
   // AI Prompt collapsing timer: collapses full prompts after 5 seconds
-  useEffect(() => {
-    if (!aiPrompt || aiPrompt.isCollapsed) return;
-    const timer = setTimeout(() => {
-      setAiPrompt(prev => prev ? { ...prev, isCollapsed: true } : null);
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [aiPrompt?.text, aiPrompt?.isCollapsed]);
-
-  // Cluster AI prompt trigger: triggers a creative prompt when a cluster forms
-  const activeClusterCount = useRef(0);
   const grassAreas = calculateGrassAreas();
-
-  useEffect(() => {
-    const activeClusters = calculateGrassAreas();
-
-    // Trigger only if a new cluster zone was created
-    if (activeClusters.length > activeClusterCount.current && !aiPrompt) {
-      const cluster = activeClusters[0];
-      const clusterPrompts = [
-        "Welk idee in dit cluster botst stiekem het hardst met de rest?",
-        "Als deze groep ideeën een antwoord is, wat was dan de oorspronkelijke vraag?",
-        "Wat ontbreekt er nog om van deze groep een concreet concept te maken?",
-        "Wat gebeurt er als je de belangrijkste aanname van deze groep omdraait?"
-      ];
-      const promptText = "Misschien zit hier een verband.";
-
-      setAiPrompt({
-        text: promptText,
-        x: cluster.x,
-        y: cluster.y - 80,
-        isCollapsed: false,
-        targetId: `cluster-${cluster.id}`,
-        createdAt: Date.now()
-      });
-    }
-    activeClusterCount.current = activeClusters.length;
-  }, [grassAreas.length, aiPrompt]);
-
-  useEffect(() => {
-    if (!connectionSignature || aiPrompt || selectedTokenId || selectedRelationKey) return;
-
-    const timer = setTimeout(() => {
-      const relation = connections[0];
-      if (!relation) return;
-
-      const tokenA = canvasTokens.find(token => token.id === relation.from);
-      const tokenB = canvasTokens.find(token => token.id === relation.to);
-      if (!tokenA || !tokenB) return;
-
-      setAiPrompt({
-        text: "Misschien zit hier een verband.",
-        x: (tokenA.x + tokenB.x) / 2,
-        y: (tokenA.y + tokenB.y) / 2 - 40,
-        isCollapsed: false,
-        targetId: `relation-${relation.from}-${relation.to}`,
-        createdAt: Date.now()
-      });
-    }, 2500);
-
-    return () => clearTimeout(timer);
-  }, [connectionSignature, aiPrompt, selectedTokenId, selectedRelationKey, canvasTokens, connections]);
 
   const isInArchiveZone = (x: number, y: number) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -1276,12 +1213,10 @@ export function TokenClusteringCanvas() {
 
         {/* Dynamic cluster circles */}
         {grassAreas.map((area) => {
-          const isTargeted = aiPrompt && aiPrompt.targetId === `cluster-${area.id}`;
-
           return (
             <div
               key={`cluster-${area.id}`}
-              className={`absolute pointer-events-none cluster-glowing-circle ${isTargeted ? 'cluster-targeted-pulse' : ''}`}
+              className="absolute pointer-events-none cluster-glowing-circle"
               style={{
                 left: `${area.x}px`,
                 top: `${area.y}px`,
@@ -1289,7 +1224,7 @@ export function TokenClusteringCanvas() {
                 height: `${area.radius * 2}px`,
                 transform: 'translate(-50%, -50%)',
                 borderRadius: '50%',
-                border: isTargeted ? '2px solid #fbbf24' : '2px solid #10b981',
+                border: '2px solid #10b981',
                 background: 'transparent',
                 opacity: 0.8,
                 zIndex: 5,
@@ -1313,7 +1248,7 @@ export function TokenClusteringCanvas() {
               showDrawingThumbnail={drawingThumbnailIds.has(token.id)}
               isConnected={connectedTokenIds.has(token.id)}
               isPulsing={false}
-              isYellowSuggested={aiPrompt?.targetId === token.id}
+              isYellowSuggested={false}
               allTokens={canvasTokens.map(t => ({ id: t.id, x: t.x, y: t.y }))}
               onMove={handleMove}
               onRotate={handleRotate}
@@ -1324,7 +1259,6 @@ export function TokenClusteringCanvas() {
               onSelect={(id) => {
                 setSelectedTokenId(id);
                 setSelectedRelationKey(null);
-                setAiPrompt(null);
               }}
               isDimmed={isTokenDimmed(token.id)}
               status={token.status}
@@ -1335,63 +1269,7 @@ export function TokenClusteringCanvas() {
 
 
 
-        {/* Collapsing AI suggestions (Only 1 visible, amber/gold themed) */}
-        {aiPrompt && (() => {
-          if (aiPrompt.isCollapsed) {
-            // Collapsed Marker (Pulse gold sparkle dot)
-            return (
-              <div
-                className="absolute z-[950] cursor-pointer hover:scale-110 active:scale-95 transition-all duration-300 animate-fade-in"
-                style={{
-                  left: `${aiPrompt.x}px`,
-                  top: `${aiPrompt.y + 15}px`,
-                  transform: 'translate(-50%, -50%)',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setAiPrompt(prev => prev ? { ...prev, isCollapsed: false } : null);
-                }}
-                title="Toon AI Suggestie"
-              >
-                <div className="w-6 h-6 bg-white border border-zinc-950 rounded-full flex items-center justify-center">
-                  <Sparkles className="w-3 h-3 text-zinc-950" />
-                </div>
-              </div>
-            );
-          }
 
-          // Full Expanded AI Prompt Card
-          return (
-            <div
-              className="absolute z-[950] animate-fade-in"
-              style={{
-                left: `${aiPrompt.x}px`,
-                top: `${aiPrompt.y}px`,
-                transform: 'translate(-50%, -100%)',
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Card className="bg-white border border-zinc-950 rounded w-60 overflow-hidden">
-                <CardContent className="p-3">
-                  <div className="flex items-start gap-2">
-                    <Sparkles className="w-4 h-4 text-zinc-950 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1 flex flex-col gap-1.5">
-                      <p className="text-zinc-950 text-xs font-semibold leading-normal">
-                        {aiPrompt.text}
-                      </p>
-                      <button
-                        onClick={() => setAiPrompt(prev => prev ? { ...prev, isCollapsed: true } : null)}
-                        className="text-[9px] text-zinc-500 hover:underline font-bold uppercase tracking-wider self-end mt-1 cursor-pointer"
-                      >
-                        Inklappen
-                      </button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          );
-        })()}
 
 
       </div>
