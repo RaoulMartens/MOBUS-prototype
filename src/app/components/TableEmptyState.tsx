@@ -123,13 +123,23 @@ export function TableEmptyState() {
         <div className="w-1.5 h-1.5 rounded-full border border-zinc-950 bg-transparent" />
       </div>
 
+      <style>{`
+        @keyframes fadeInOnly {
+          from { opacity: 0; transform: scale(0.98); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .animate-fade-in-only {
+          animation: fadeInOnly 0.4s ease-out forwards;
+        }
+      `}</style>
+
       {/* Moving Text Group (Bouncing standby DVD screensaver style) */}
       <div
         ref={textRef}
         className="absolute left-0 top-0 w-80 text-center px-4 z-10"
         style={{ transform: 'translate3d(50vw, 50vh, 0)' }}
       >
-        <div className="animate-fade-in">
+        <div className="animate-fade-in-only">
           <h2 className="text-xl md:text-2xl font-black text-zinc-400 dark:text-zinc-650 tracking-tight mb-2">
             Nog geen ideeën op tafel
           </h2>
