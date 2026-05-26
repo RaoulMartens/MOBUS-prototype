@@ -72,18 +72,6 @@ export function ExperienceInfo() {
             Ontdek nieuwe inzichten, leg verbanden en bouw samen aan een levend netwerk van ideeën.
           </p>
 
-          {/* QR Code Visual Prompt */}
-          <div className="flex flex-col items-center gap-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800/60 rounded px-6 py-6 w-full max-w-md mb-10">
-            <div className="relative flex items-center justify-center w-12 h-12">
-              <div className="absolute inset-0 rounded-full bg-zinc-950/5 dark:bg-zinc-50/5 animate-ping opacity-75" />
-              <div className="absolute inset-2 rounded-full bg-zinc-950/10 dark:bg-zinc-50/10 animate-pulse" />
-              <QrCode className="w-6 h-6 text-zinc-950 dark:text-zinc-50 relative z-10" />
-            </div>
-            <p className="text-xs md:text-sm font-semibold tracking-wide text-zinc-950 dark:text-zinc-50">
-              Scan de QR-code om te verbinden
-            </p>
-          </div>
-
           {/* Core Feature Pillars */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full text-left mb-10 border-t border-b border-zinc-150 dark:border-zinc-800/80 py-8">
             {/* Pillar 1 */}
