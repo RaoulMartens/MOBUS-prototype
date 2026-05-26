@@ -749,7 +749,6 @@ export function TokenClusteringCanvas() {
   }, []);
 
   const handleMove = (id: string, newX: number, newY: number) => {
-    setAiPrompt(null); // Clear active prompts on move
     setSelectedRelationKey(null);
     const constrainedY = Math.max(newY, TOP_RESTRICTED_AREA + 50);
     setArchiveCandidateId(isInArchiveZone(newX, constrainedY) ? id : null);
@@ -766,7 +765,6 @@ export function TokenClusteringCanvas() {
   };
 
   const handleRotate = (id: string, rotation: number) => {
-    setAiPrompt(null);
     setSelectedRelationKey(null);
 
     setCanvasTokens(prev => {
@@ -781,7 +779,6 @@ export function TokenClusteringCanvas() {
   };
 
   const handleScale = (id: string, scale: number) => {
-    setAiPrompt(null);
     setSelectedRelationKey(null);
 
     setCanvasTokens(prev => {
@@ -812,7 +809,6 @@ export function TokenClusteringCanvas() {
     if (window.confirm(`Weet je zeker dat je ${tokenLabel} wilt parkeren?`)) {
       setSelectedTokenId(null);
       setSelectedRelationKey(null);
-      setAiPrompt(null);
       setArchiveFeedback("Token geparkeerd");
       await archiveToken(id);
       setTimeout(() => setArchiveFeedback(null), 2200);
@@ -863,9 +859,6 @@ export function TokenClusteringCanvas() {
 
   // Determine Dutch dynamic contextual hint (Connection Preview State)
   const getHelpHint = () => {
-    if (aiPrompt) {
-      return "MOBUS ziet een mogelijke denkrichting.";
-    }
     if (archiveCandidateId) {
       return "Laat los om uit actieve ruimte te halen.";
     }
