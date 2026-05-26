@@ -7,18 +7,16 @@ import { IdeaGarden } from './components/IdeaGarden';
 import { Dashboard } from './components/Dashboard';
 import { Landing } from './components/Landing';
 import { PhoneApp } from './components/PhoneApp';
+import { ExperienceInfo } from './components/ExperienceInfo';
 
 const createSessionId = () => `mobus-${Math.floor(1000 + Math.random() * 9000)}`;
 
 function DashboardWrapper() {
   const navigate = useNavigate();
-  const { updateSessionId } = useTokens();
 
   const handleSelectApp = (appId: string) => {
     if (appId === 'idea-ecosystem') {
-      const sessionId = createSessionId();
-      updateSessionId(sessionId);
-      navigate(`/table?sessionId=${sessionId}`);
+      navigate('/info');
     } else if (appId === 'phone-input') {
       navigate('/phone');
     }
@@ -57,6 +55,7 @@ export default function App() {
         <div className="size-full bg-black">
           <Routes>
             <Route path="/" element={<DashboardWrapper />} />
+            <Route path="/info" element={<ExperienceInfo />} />
             <Route path="/landing" element={<StartSessionRedirect />} />
             <Route path="/dev/setup" element={<LandingWrapper />} />
             <Route path="/dashboard" element={<DashboardWrapper />} />
