@@ -698,6 +698,13 @@ export function TokenClusteringCanvas() {
         backgroundSize: '40px 40px',
       }}></div>
 
+      {/* Subtle center marker (tiny crosshair) - permanently visible */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 opacity-10 flex items-center justify-center pointer-events-none select-none">
+        <div className="absolute w-4 h-px bg-zinc-950" />
+        <div className="absolute h-4 w-px bg-zinc-950" />
+        <div className="w-1.5 h-1.5 rounded-full border border-zinc-950 bg-transparent" />
+      </div>
+
       {/* Dynamic cluster circles (only when cluster has clear active purpose) */}
       {grassAreas.filter(shouldRenderClusterCircle).map((area, index) => {
         const baseRadius = 90;
@@ -951,17 +958,7 @@ export function TokenClusteringCanvas() {
           );
         })}
 
-        {/* Dynamic Contextual Help Hint */}
-        {currentHint && (
-          <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-40 pointer-events-none">
-            <div className="bg-white border border-zinc-950 px-5 py-2 rounded flex items-center gap-2">
-              <span className="w-1.5 h-1.5 bg-zinc-950 rounded-full" />
-              <p className="text-zinc-950 text-xs font-semibold tracking-wide">
-                {currentHint}
-              </p>
-            </div>
-          </div>
-        )}
+
 
         {/* Collapsing AI suggestions (Only 1 visible, amber/gold themed) */}
         {aiPrompt && (() => {

@@ -92,12 +92,7 @@ export function TableEmptyState() {
       <div className="absolute bottom-8 left-8 w-6 h-6 border-b border-l border-zinc-200 dark:border-zinc-800/40 opacity-40" />
       <div className="absolute bottom-8 right-8 w-6 h-6 border-b border-r border-zinc-200 dark:border-zinc-800/40 opacity-40" />
 
-      {/* Subtle center marker (tiny crosshair) */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 opacity-10 flex items-center justify-center">
-        <div className="absolute w-4 h-px bg-zinc-950" />
-        <div className="absolute h-4 w-px bg-zinc-950" />
-        <div className="w-1.5 h-1.5 rounded-full border border-zinc-950 bg-transparent" />
-      </div>
+
 
       <style>{`
         @keyframes fadeInOnly {
