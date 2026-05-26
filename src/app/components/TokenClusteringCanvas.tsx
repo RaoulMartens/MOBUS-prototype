@@ -196,6 +196,7 @@ export function TokenClusteringCanvas() {
   const [canvasTokens, setCanvasTokens] = useState<CanvasToken[]>([]);
   const [tokenCounter, setTokenCounter] = useState(0);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const outerRef = useRef<HTMLDivElement>(null);
   const canvasTokensRef = useRef<CanvasToken[]>([]);
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
@@ -901,8 +902,29 @@ export function TokenClusteringCanvas() {
 
 
 
+  // Disable all browser default gestures on the table canvas
+  useEffect(() => {
+    const el = outerRef.current;
+    if (!el) return;
+    const prevent = (e: Event) => e.preventDefault();
+    el.addEventListener('touchstart', prevent, { passive: false });
+    el.addEventListener('touchmove',  prevent, { passive: false });
+    el.addEventListener('wheel',       prevent, { passive: false });
+    el.addEventListener('contextmenu', prevent);
+    return () => {
+      el.removeEventListener('touchstart', prevent);
+      el.removeEventListener('touchmove',  prevent);
+      el.removeEventListener('wheel',       prevent);
+      el.removeEventListener('contextmenu', prevent);
+    };
+  }, []);
+
   return (
-    <div className="w-full h-full relative overflow-hidden" style={{ backgroundColor: '#f4f4f5' }}>
+    <div
+      ref={outerRef}
+      className="w-full h-full relative overflow-hidden"
+      style={{ backgroundColor: '#f4f4f5', touchAction: 'none', userSelect: 'none' }}
+    >
 
       {/* Spatial archive edge zone */}
       <div
@@ -941,7 +963,7 @@ export function TokenClusteringCanvas() {
         <div className="w-1.5 h-1.5 rounded-full border border-zinc-950 bg-transparent" />
       </div>
 
-      <div ref={canvasRef} className="w-full h-full relative" onClick={handleCanvasClick}>
+      <div ref={canvasRef} className="w-full h-full relative" style={{ touchAction: 'none' }} onClick={handleCanvasClick}>
         {showStartState && (
           <TableEmptyState />
         )}

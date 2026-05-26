@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from 'react';
+import { useRef, useState, useEffect, useCallback, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from 'react';
 
 interface TokenProps {
   id: string;
@@ -36,6 +36,9 @@ interface TokenProps {
   } | null;
 }
 
+const MIN_SCALE = 0.4;
+const MAX_SCALE = 3.0;
+
 export function Token({
   id,
   x,
@@ -60,24 +63,33 @@ export function Token({
   ai_metadata = null,
 }: TokenProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isTouching, setIsTouching] = useState(false);
+  const [isActive, setIsActive] = useState(false);   // any pointer down
   const [isHovered, setIsHovered] = useState(false);
   const [justCreated, setJustCreated] = useState(true);
 
+  // Per-token active pointer map: pointerId -> {clientX, clientY}
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
 
-  const dragStartPos = useRef({ x: 0, y: 0 });
-  const dragStartTime = useRef(0);
-  const touchInteraction = useRef<{
+  // Gesture baseline (set when 2nd finger lands or drag starts)
+  const gesture = useRef<{
     mode: 'drag' | 'transform';
-    initialDist: number;
-    initialAngle: number;
-    startScale: number;
-    startRotation: number;
-    lastX: number;
-    lastY: number;
+    // drag
+    startClientX: number;
+    startClientY: number;
+    startTokenX: number;
+    startTokenY: number;
+    // transform baseline
+    initDist: number;
+    initAngle: number;
+    initScale: number;
+    initRotation: number;
+    initCenterX: number; // token x when transform started
+    initCenterY: number;
+    // tap detection
+    downTime: number;
+    downClientX: number;
+    downClientY: number;
   } | null>(null);
-  const touchCleanup = useRef<(() => void) | null>(null);
 
   // Entry animation
   useEffect(() => {
@@ -85,263 +97,263 @@ export function Token({
     return () => clearTimeout(timer);
   }, []);
 
-  const handleMouseDown = (e: ReactMouseEvent) => {
-    if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
-
-    dragStartPos.current = { x: e.clientX, y: e.clientY };
-    dragStartTime.current = Date.now();
-    setIsDragging(true);
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const parent = ref.current?.parentElement;
-      if (!parent) return;
-
-      const parentRect = parent.getBoundingClientRect();
-      const newX = moveEvent.clientX - parentRect.left;
-      const newY = moveEvent.clientY - parentRect.top;
-
-      onMove(id, newX, newY);
-    };
-
-    const handleMouseUp = (upEvent: MouseEvent) => {
-      setIsDragging(false);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-
-      // Check if it was a click
-      const distance = Math.sqrt(
-        Math.pow(upEvent.clientX - dragStartPos.current.x, 2) +
-        Math.pow(upEvent.clientY - dragStartPos.current.y, 2)
-      );
-      const duration = Date.now() - dragStartTime.current;
-
-      if (distance < 5 && duration < 250) {
-        onSelect(isSelected ? null : id);
-      } else {
-        const parent = ref.current?.parentElement;
-        if (parent) {
-          const parentRect = parent.getBoundingClientRect();
-          onRelease(id, upEvent.clientX - parentRect.left, upEvent.clientY - parentRect.top);
-        }
-      }
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+  const getPointerPair = () => {
+    const pts = Array.from(pointers.current.values());
+    return pts.length >= 2 ? pts : null;
   };
 
-  const normalizeRotation = (value: number) => {
-    return Math.round((((value % 360) + 360) % 360) * 10) / 10;
+  const getPairDist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    Math.hypot(b.x - a.x, b.y - a.y);
+
+  const getPairAngle = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    Math.atan2(b.y - a.y, b.x - a.x) * (180 / Math.PI);
+
+  const normalizeRotation = (v: number) =>
+    Math.round((((v % 360) + 360) % 360) * 10) / 10;
+
+  const toParentCoords = (clientX: number, clientY: number) => {
+    const parent = ref.current?.parentElement;
+    if (!parent) return { x: clientX, y: clientY };
+    const rect = parent.getBoundingClientRect();
+    return { x: clientX - rect.left, y: clientY - rect.top };
   };
 
-  const getTouchCenter = (touches: TouchList) => {
-    const t1 = touches[0];
-    const t2 = touches[1] || touches[0];
-    return {
-      x: (t1.clientX + t2.clientX) / 2,
-      y: (t1.clientY + t2.clientY) / 2,
+  const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
+
+  // ── Drag mode baseline ──────────────────────────────────────────────────────
+  const startDrag = (clientX: number, clientY: number) => {
+    gesture.current = {
+      mode: 'drag',
+      startClientX: clientX,
+      startClientY: clientY,
+      startTokenX: x,
+      startTokenY: y,
+      initDist: 0,
+      initAngle: 0,
+      initScale: scale,
+      initRotation: rotation,
+      initCenterX: x,
+      initCenterY: y,
+      downTime: Date.now(),
+      downClientX: clientX,
+      downClientY: clientY,
     };
   };
 
-  const getTouchDistance = (touches: TouchList) => {
-    if (touches.length < 2) return 0;
-    const t1 = touches[0];
-    const t2 = touches[1];
-    return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-  };
-
-  const getTouchAngle = (touches: TouchList) => {
-    if (touches.length < 2) return 0;
-    const t1 = touches[0];
-    const t2 = touches[1];
-    return Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * (180 / Math.PI);
-  };
-
-  const startTransformGesture = (touches: TouchList) => {
-    const center = getTouchCenter(touches);
-    touchInteraction.current = {
+  // ── Transform mode baseline ─────────────────────────────────────────────────
+  const startTransform = (pts: { x: number; y: number }[]) => {
+    const [a, b] = pts;
+    gesture.current = {
       mode: 'transform',
-      initialDist: getTouchDistance(touches),
-      initialAngle: getTouchAngle(touches),
-      startScale: scale,
-      startRotation: rotation,
-      lastX: center.x,
-      lastY: center.y,
+      startClientX: 0,
+      startClientY: 0,
+      startTokenX: x,
+      startTokenY: y,
+      initDist: getPairDist(a, b),
+      initAngle: getPairAngle(a, b),
+      initScale: scale,
+      initRotation: rotation,
+      initCenterX: x,
+      initCenterY: y,
+      downTime: gesture.current?.downTime ?? Date.now(),
+      downClientX: gesture.current?.downClientX ?? (a.x + b.x) / 2,
+      downClientY: gesture.current?.downClientY ?? (a.y + b.y) / 2,
     };
-    setIsDragging(false);
-    setIsTouching(true);
-    onSelect(id);
   };
 
-
-
-  const handleTouchStart = (e: ReactTouchEvent) => {
-    if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
+  // ── Pointer down ────────────────────────────────────────────────────────────
+  const handlePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).tagName === 'INPUT' ||
+        (e.target as HTMLElement).tagName === 'TEXTAREA') return;
 
     e.preventDefault();
     e.stopPropagation();
-    setIsTouching(true);
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
 
-    if (touchInteraction.current) {
-      if (e.touches.length >= 2) {
-        startTransformGesture(e.touches);
-      }
-      return;
-    }
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    setIsActive(true);
+    onSelect(id);
 
-    if (e.touches.length >= 2) {
-      startTransformGesture(e.touches);
+    const pts = Array.from(pointers.current.values());
+
+    if (pts.length >= 2) {
+      // 2nd finger — switch to transform
+      startTransform(pts);
     } else {
-      const touch = e.touches[0];
-      dragStartPos.current = { x: touch.clientX, y: touch.clientY };
-      dragStartTime.current = Date.now();
-      setIsDragging(true);
-      touchInteraction.current = {
-        mode: 'drag',
-        initialDist: 0,
-        initialAngle: 0,
-        startScale: scale,
-        startRotation: rotation,
-        lastX: touch.clientX,
-        lastY: touch.clientY,
-      };
+      // 1st finger — drag
+      startDrag(e.clientX, e.clientY);
     }
+  }, [x, y, scale, rotation, id]);
 
-    const moveTokenToTouchPoint = (clientX: number, clientY: number) => {
-      const parent = ref.current?.parentElement;
-      if (!parent) return;
+  // ── Pointer move ────────────────────────────────────────────────────────────
+  const handlePointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    e.preventDefault();
 
-      const parentRect = parent.getBoundingClientRect();
-      onMove(id, clientX - parentRect.left, clientY - parentRect.top);
-    };
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-    const handleTouchMove = (moveEvent: TouchEvent) => {
-      const gesture = touchInteraction.current;
-      if (!gesture) return;
-      moveEvent.preventDefault();
+    const g = gesture.current;
+    if (!g) return;
 
-      if (moveEvent.touches.length >= 2) {
-        if (gesture.mode !== 'transform') {
-          startTransformGesture(moveEvent.touches);
-        }
-        const transformGesture = touchInteraction.current;
-        if (!transformGesture) return;
+    const pts = Array.from(pointers.current.values());
 
-        const currentDist = getTouchDistance(moveEvent.touches);
-        const distRatio = transformGesture.initialDist > 0 ? currentDist / transformGesture.initialDist : 1;
-        const nextScale = Math.min(Math.max(transformGesture.startScale * distRatio, 0.5), 2.5);
-        if (onScale) {
-          onScale(id, Math.round(nextScale * 100) / 100);
-        }
-
-        const currentAngle = getTouchAngle(moveEvent.touches);
-        const angleDiff = currentAngle - transformGesture.initialAngle;
-        const nextRotation = normalizeRotation(transformGesture.startRotation + angleDiff);
-        onRotate(id, nextRotation);
-
-        const center = getTouchCenter(moveEvent.touches);
-        transformGesture.lastX = center.x;
-        transformGesture.lastY = center.y;
-        moveTokenToTouchPoint(center.x, center.y);
+    if (pts.length >= 2) {
+      // ── Two-finger: rotate + scale + translate ───────────────────────────
+      if (g.mode !== 'transform') {
+        startTransform(pts);
         return;
       }
 
-      const touchPoint = moveEvent.touches[0];
-      if (!touchPoint) return;
+      const [a, b] = pts;
+      const currentDist = getPairDist(a, b);
+      const currentAngle = getPairAngle(a, b);
 
-      gesture.lastX = touchPoint.clientX;
-      gesture.lastY = touchPoint.clientY;
-      moveTokenToTouchPoint(touchPoint.clientX, touchPoint.clientY);
-    };
+      const distRatio = g.initDist > 0 ? currentDist / g.initDist : 1;
+      const newScale = clampScale(g.initScale * distRatio);
+      const angleDiff = currentAngle - g.initAngle;
+      const newRotation = normalizeRotation(g.initRotation + angleDiff);
 
-    const handleTouchEnd = (endEvent: TouchEvent) => {
-      const gesture = touchInteraction.current;
-      if (!gesture) return;
+      // Center of two fingers → token position
+      const center = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      const parentCoords = toParentCoords(center.x, center.y);
 
-      if (endEvent.touches.length > 0) {
-        if (endEvent.touches.length >= 2) {
-          startTransformGesture(endEvent.touches);
-          return;
+      onMove(id, parentCoords.x, parentCoords.y);
+      onRotate(id, newRotation);
+      if (onScale) onScale(id, Math.round(newScale * 1000) / 1000);
+
+    } else {
+      // ── One-finger drag ──────────────────────────────────────────────────
+      if (g.mode === 'transform') return; // wait until finger count drops before switching back
+
+      const dx = e.clientX - g.startClientX;
+      const dy = e.clientY - g.startClientY;
+      const parentBase = toParentCoords(g.startClientX, g.startClientY);
+      const parentNew  = toParentCoords(e.clientX, e.clientY);
+
+      void dx; void dy; // used implicitly via parentNew - parentBase shift
+      const newX = g.startTokenX + (parentNew.x - parentBase.x);
+      const newY = g.startTokenY + (parentNew.y - parentBase.y);
+
+      onMove(id, newX, newY);
+    }
+  }, [id, onMove, onRotate, onScale]);
+
+  // ── Pointer up / cancel ─────────────────────────────────────────────────────
+  const handlePointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+
+    pointers.current.delete(e.pointerId);
+    const pts = Array.from(pointers.current.values());
+
+    if (pts.length === 0) {
+      // All fingers lifted
+      const g = gesture.current;
+      setIsActive(false);
+
+      if (g) {
+        // Tap detection
+        const dist = Math.hypot(e.clientX - g.downClientX, e.clientY - g.downClientY);
+        const dur  = Date.now() - g.downTime;
+
+        if (g.mode === 'drag' && dist < 8 && dur < 300) {
+          onSelect(isSelected ? null : id);
+        } else {
+          const coords = toParentCoords(e.clientX, e.clientY);
+          onRelease(id, coords.x, coords.y);
         }
-
-        const remainingTouch = endEvent.touches[0];
-        touchInteraction.current = {
-          ...gesture,
-          mode: 'drag',
-          lastX: remainingTouch.clientX,
-          lastY: remainingTouch.clientY,
-        };
-        setIsDragging(true);
-        return;
       }
 
-      setIsDragging(false);
-      setIsTouching(false);
-      touchCleanup.current?.();
-      touchCleanup.current = null;
-      touchInteraction.current = null;
+      gesture.current = null;
 
-      const endX = gesture.lastX;
-      const endY = gesture.lastY;
-      const distance = Math.hypot(endX - dragStartPos.current.x, endY - dragStartPos.current.y);
-      const duration = Date.now() - dragStartTime.current;
+    } else if (pts.length === 1) {
+      // One finger remains — switch back to drag from current token position
+      const [remaining] = Array.from(pointers.current.entries());
+      const [, pt] = remaining;
+      startDrag(pt.x, pt.y);
+      // Update drag baseline to current token position (already moved by transform)
+      if (gesture.current) {
+        gesture.current.startTokenX = x;
+        gesture.current.startTokenY = y;
+      }
+    } else {
+      // Still 2+ fingers — re-baseline transform
+      startTransform(pts);
+    }
+  }, [id, isSelected, onSelect, onRelease, x, y, scale, rotation]);
 
-      if (gesture.mode === 'drag' && distance < 5 && duration < 250) {
+  // Mouse fallback (desktop)
+  const handleMouseDown = (e: ReactMouseEvent) => {
+    if ((e.target as HTMLElement).tagName === 'INPUT' ||
+        (e.target as HTMLElement).tagName === 'TEXTAREA') return;
+    if (e.button !== 0) return;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startTX = x;
+    const startTY = y;
+    const downTime = Date.now();
+
+    const onMove_ = (mv: MouseEvent) => {
+      const parentBase = toParentCoords(startX, startY);
+      const parentNew  = toParentCoords(mv.clientX, mv.clientY);
+      onMove(id, startTX + (parentNew.x - parentBase.x), startTY + (parentNew.y - parentBase.y));
+    };
+
+    const onUp_ = (up: MouseEvent) => {
+      document.removeEventListener('mousemove', onMove_);
+      document.removeEventListener('mouseup', onUp_);
+
+      const dist = Math.hypot(up.clientX - startX, up.clientY - startY);
+      const dur  = Date.now() - downTime;
+
+      if (dist < 5 && dur < 250) {
         onSelect(isSelected ? null : id);
       } else {
-        moveTokenToTouchPoint(endX, endY);
-        const parent = ref.current?.parentElement;
-        if (parent) {
-          const parentRect = parent.getBoundingClientRect();
-          onRelease(id, endX - parentRect.left, endY - parentRect.top);
-        }
+        const coords = toParentCoords(up.clientX, up.clientY);
+        onRelease(id, coords.x, coords.y);
       }
     };
 
-    document.addEventListener('touchmove', handleTouchMove, { passive: false });
-    document.addEventListener('touchend', handleTouchEnd);
-    document.addEventListener('touchcancel', handleTouchEnd);
-
-    touchCleanup.current = () => {
-      document.removeEventListener('touchmove', handleTouchMove);
-      document.removeEventListener('touchend', handleTouchEnd);
-      document.removeEventListener('touchcancel', handleTouchEnd);
-    };
+    document.addEventListener('mousemove', onMove_);
+    document.addEventListener('mouseup', onUp_);
   };
-
-  useEffect(() => {
-    return () => {
-      touchCleanup.current?.();
-    };
-  }, []);
 
   // Normal / Selected token layout
   const diameter = isSelected ? 112 : 96;
-  
+
   return (
     <div
       ref={ref}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       onMouseDown={handleMouseDown}
-      onTouchStart={handleTouchStart}
-      onMouseEnter={() => {
-        if (isDimmed) return;
-        setIsHovered(true);
-      }}
-      onMouseLeave={() => {
-        setIsHovered(false);
-      }}
+      onMouseEnter={() => { if (!isDimmed) setIsHovered(true); }}
+      onMouseLeave={() => setIsHovered(false)}
       className="select-none touch-none token-container"
       style={{
         position: 'absolute',
         left: x,
         top: y,
-        transform: `translate(-50%, -50%) rotate(${rotation}deg) scale(${scale * (isDragging ? 1.05 : (isHovered && !isDimmed) ? 1.02 : 1) * (isDimmed ? 0.9 : 1)})`,
-        cursor: isDimmed ? 'pointer' : isDragging ? 'grabbing' : 'grab',
-        transition: isDragging || isTouching
-          ? 'opacity 0.3s ease-out'
+        transform: `translate(-50%, -50%) rotate(${rotation}deg) scale(${
+          scale *
+          (isActive ? 1.07 : (isHovered && !isDimmed) ? 1.02 : 1) *
+          (isDimmed ? 0.9 : 1)
+        })`,
+        cursor: isDimmed ? 'pointer' : isActive ? 'grabbing' : 'grab',
+        transition: isActive
+          ? 'box-shadow 0.15s ease-out, opacity 0.3s ease-out'
           : 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-out',
-        zIndex: isDragging ? 1000 : isSelected ? 900 : isHovered ? 100 : 10,
+        zIndex: isActive ? 1000 : isSelected ? 900 : isHovered ? 100 : 10,
         opacity: isDimmed ? 0.2 : 1,
+        // Active-touch lift shadow on the container
+        filter: isActive
+          ? 'drop-shadow(0 8px 24px rgba(0,0,0,0.22)) drop-shadow(0 2px 6px rgba(0,0,0,0.14))'
+          : isHovered && !isDimmed
+            ? 'drop-shadow(0 4px 12px rgba(0,0,0,0.12))'
+            : 'none',
+        willChange: isActive ? 'transform' : 'auto',
       }}
     >
       {/* Expanding ripples under token on spawn */}
@@ -373,7 +385,6 @@ export function Token({
       {/* Inner wrapper for entry scale animation */}
       <div className={justCreated ? "animate-token-spawn" : ""} style={{ transformOrigin: 'center' }}>
 
-
       {/* Central Circle Orb */}
       <div
         className={`rounded-full flex flex-col items-center justify-center text-center p-2 border-2 ${
@@ -388,13 +399,18 @@ export function Token({
         style={{
           width: `${diameter}px`,
           height: `${diameter}px`,
-          position: 'relative'
+          position: 'relative',
+          // Subtle inner ring when actively touched
+          boxShadow: isActive
+            ? 'inset 0 0 0 2px rgba(0,0,0,0.08), 0 0 0 3px rgba(9,9,11,0.06)'
+            : undefined,
+          transition: 'box-shadow 0.15s ease-out',
         }}
       >
         {status === "needs_classification" && (
           <span className="absolute top-1 right-2 text-amber-500 text-xs" title="Classificatie mislukt">⚠️</span>
         )}
-        
+
         {status === "pending_classification" ? (
           <div className="flex flex-col items-center justify-center gap-1.5">
             <svg className="animate-spin h-5 w-5 text-zinc-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
