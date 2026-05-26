@@ -6,10 +6,9 @@ export function TableEmptyState() {
 
   useEffect(() => {
     let animationId: number;
-
-    // Start centered: half screen minus half container size
-    let x = window.innerWidth / 2 - 160;
-    let y = window.innerHeight / 2 - 40;
+    let initialized = false;
+    let x = 0;
+    let y = 0;
 
     // Slow and subtle movement: between 0.6 and 1.0 px per frame
     let dx = (Math.random() > 0.5 ? 1 : -1) * (0.6 + Math.random() * 0.4);
@@ -26,10 +25,17 @@ export function TableEmptyState() {
       const parentRect = container.getBoundingClientRect();
       const textRect = textNode.getBoundingClientRect();
 
-      // Guard: wait until layout has loaded with non-zero width/height
-      if (parentRect.width === 0 || textRect.width === 0) {
+      // Guard: wait until layout has loaded with realistic width
+      if (parentRect.width < 400 || textRect.width === 0) {
         animationId = requestAnimationFrame(update);
         return;
+      }
+
+      // Center it initially in the container once layout is loaded
+      if (!initialized) {
+        x = parentRect.width / 2 - textRect.width / 2;
+        y = parentRect.height / 2 - textRect.height / 2;
+        initialized = true;
       }
 
       // Bounds with 32px padding
