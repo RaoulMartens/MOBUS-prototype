@@ -90,7 +90,8 @@ export function TokenClusteringCanvas() {
     archiveToken,
     loading,
     backendConnected,
-    sessionId
+    sessionId,
+    addToken
   } = useTokens();
 
   const [canvasTokens, setCanvasTokens] = useState<CanvasToken[]>([]);
@@ -363,6 +364,24 @@ export function TokenClusteringCanvas() {
       console.log('[TokenClusteringCanvas] Canvas cleared');
     }
   }, [dbTokens, selectedTokenId]);
+
+  // Seed demo ideas automatically for "demo" session ID
+  useEffect(() => {
+    if (!loading && dbTokens.length === 0 && (sessionId === 'demo' || sessionId === 'demo-session')) {
+      console.log('[TokenClusteringCanvas] Seeding demo ideas...');
+      const demoIdeas = [
+        { text: 'Idee A: Mensgerichte Robotica', desc: 'Robots inzetten om repetitieve taken in het team te automatiseren.', x: 350, y: 300 },
+        { text: 'Idee B: Co-creatie Hubs', desc: 'Fysieke ruimtes waar burgers en ontwerpers samen prototypes testen.', x: 450, y: 380 },
+        { text: 'Idee C: Ethische AI Checklist', desc: 'Een transparante methodiek om privacy en bias te controleren.', x: 550, y: 280 }
+      ];
+      // Seed tokens with a slight staggered delay to make spawn animations play beautifully
+      demoIdeas.forEach((idea, index) => {
+        setTimeout(() => {
+          addToken(idea.text, { x: idea.x, y: idea.y }, idea.desc);
+        }, index * 250);
+      });
+    }
+  }, [loading, dbTokens.length, sessionId, addToken]);
 
   // Track mouse position
   useEffect(() => {
