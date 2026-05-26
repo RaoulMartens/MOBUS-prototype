@@ -39,6 +39,14 @@ interface TokenProps {
 const MIN_SCALE = 0.4;
 const MAX_SCALE = 3.0;
 
+// Shortest signed angle delta — handles ±180° atan2 wrap-around
+const shortestDelta = (from: number, to: number): number => {
+  let d = to - from;
+  while (d >  180) d -= 360;
+  while (d < -180) d += 360;
+  return d;
+};
+
 export function Token({
   id,
   x,
@@ -67,34 +75,36 @@ export function Token({
   const [isHovered, setIsHovered] = useState(false);
   const [justCreated, setJustCreated] = useState(true);
 
-  // ── Stable refs: always current, never stale in handlers ─────────────────
+  // ── Stable refs — always latest, never stale in handlers ─────────────────
   const propsRef = useRef({ id, x, y, scale, rotation, isSelected });
-  useEffect(() => {
-    propsRef.current = { id, x, y, scale, rotation, isSelected };
-  });
+  useEffect(() => { propsRef.current = { id, x, y, scale, rotation, isSelected }; });
 
   const cbRef = useRef({ onMove, onRotate, onRelease, onSelect, onScale });
-  useEffect(() => {
-    cbRef.current = { onMove, onRotate, onRelease, onSelect, onScale };
-  });
+  useEffect(() => { cbRef.current = { onMove, onRotate, onRelease, onSelect, onScale }; });
 
-  // ── Per-token pointer tracking ────────────────────────────────────────────
+  // ── Pointer tracking ──────────────────────────────────────────────────────
   const ptrs = useRef<Map<number, { x: number; y: number }>>(new Map());
 
-  // ── Gesture state (all in ref, no React state) ────────────────────────────
+  // ── Gesture state — fully self-contained, no propsRef dependency mid-frame
+  //    Transform uses INCREMENTAL tracking per frame to avoid:
+  //    1. atan2 ±180° discontinuity (shortestDelta fixes that)
+  //    2. Stale propsRef between React renders
   const gst = useRef<{
     mode: 'drag' | 'transform';
-    // drag baseline
+
+    // drag: absolute baseline (set once at start)
     startClientX: number;
     startClientY: number;
     startTokenX: number;
     startTokenY: number;
-    // transform baseline
-    initDist: number;
-    initAngle: number;
-    initScale: number;
-    initRotation: number;
-    // tap
+
+    // transform: incremental — updated every frame
+    prevAngle: number;    // angle between fingers, last frame
+    prevDist: number;     // distance between fingers, last frame
+    prevRotation: number; // token rotation as of last frame (avoids stale propsRef)
+    prevScale: number;    // token scale as of last frame (avoids stale propsRef)
+
+    // tap detection
     downTime: number;
     downClientX: number;
     downClientY: number;
@@ -105,11 +115,11 @@ export function Token({
     return () => clearTimeout(t);
   }, []);
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+  // ── Pure helpers ──────────────────────────────────────────────────────────
+  const fingerDist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
     Math.hypot(b.x - a.x, b.y - a.y);
 
-  const angle = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+  const fingerAngle = (a: { x: number; y: number }, b: { x: number; y: number }) =>
     Math.atan2(b.y - a.y, b.x - a.x) * (180 / Math.PI);
 
   const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
@@ -125,7 +135,8 @@ export function Token({
 
   const pairList = () => Array.from(ptrs.current.values());
 
-  const baselineDrag = (clientX: number, clientY: number) => {
+  // ── Baseline setters ──────────────────────────────────────────────────────
+  const startDrag = (clientX: number, clientY: number, isFirstTouch: boolean) => {
     const p = propsRef.current;
     gst.current = {
       mode: 'drag',
@@ -133,32 +144,53 @@ export function Token({
       startClientY: clientY,
       startTokenX: p.x,
       startTokenY: p.y,
-      initDist: 0, initAngle: 0,
-      initScale: p.scale, initRotation: p.rotation,
-      downTime: gst.current?.downTime ?? Date.now(),
-      downClientX: gst.current?.downClientX ?? clientX,
-      downClientY: gst.current?.downClientY ?? clientY,
+      prevAngle: 0, prevDist: 0,
+      prevRotation: p.rotation, prevScale: p.scale,
+      downTime: isFirstTouch ? Date.now() : (gst.current?.downTime ?? Date.now()),
+      downClientX: isFirstTouch ? clientX : (gst.current?.downClientX ?? clientX),
+      downClientY: isFirstTouch ? clientY : (gst.current?.downClientY ?? clientY),
     };
   };
 
-  const baselineTransform = (pts: { x: number; y: number }[]) => {
+  const startTransform = (pts: { x: number; y: number }[]) => {
     const [a, b] = pts;
     const p = propsRef.current;
     gst.current = {
       mode: 'transform',
       startClientX: 0, startClientY: 0,
       startTokenX: p.x, startTokenY: p.y,
-      initDist: dist(a, b),
-      initAngle: angle(a, b),
-      initScale: p.scale,
-      initRotation: p.rotation,
+      // incremental baseline — current frame is the reference
+      prevAngle: fingerAngle(a, b),
+      prevDist: fingerDist(a, b),
+      prevRotation: p.rotation,
+      prevScale: p.scale,
       downTime: gst.current?.downTime ?? Date.now(),
       downClientX: gst.current?.downClientX ?? (a.x + b.x) / 2,
       downClientY: gst.current?.downClientY ?? (a.y + b.y) / 2,
     };
   };
 
-  // ── Pointer handlers (defined once, read only from refs) ──────────────────
+  // Re-baseline transform but keep the ALREADY-COMPUTED rotation/scale
+  // (used when fingers shift without a clean lift — avoids reset)
+  const rebaseTransform = (pts: { x: number; y: number }[]) => {
+    const [a, b] = pts;
+    const g = gst.current;
+    gst.current = {
+      mode: 'transform',
+      startClientX: 0, startClientY: 0,
+      startTokenX: propsRef.current.x, startTokenY: propsRef.current.y,
+      prevAngle: fingerAngle(a, b),
+      prevDist: fingerDist(a, b),
+      // carry forward what we've already accumulated
+      prevRotation: g?.prevRotation ?? propsRef.current.rotation,
+      prevScale: g?.prevScale ?? propsRef.current.scale,
+      downTime: g?.downTime ?? Date.now(),
+      downClientX: g?.downClientX ?? (a.x + b.x) / 2,
+      downClientY: g?.downClientY ?? (a.y + b.y) / 2,
+    };
+  };
+
+  // ── Pointer down ──────────────────────────────────────────────────────────
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).tagName === 'INPUT' ||
         (e.target as HTMLElement).tagName === 'TEXTAREA') return;
@@ -173,26 +205,15 @@ export function Token({
 
     const pts = pairList();
     if (pts.length >= 2) {
-      baselineTransform(pts);
+      // 2nd (or more) finger — switch to transform, carry accumulated values
+      rebaseTransform(pts);
     } else {
-      // first finger — record tap info fresh
-      gst.current = null; // reset so baselineDrag sets downTime/downClient
-      gst.current = {
-        mode: 'drag',
-        startClientX: e.clientX,
-        startClientY: e.clientY,
-        startTokenX: propsRef.current.x,
-        startTokenY: propsRef.current.y,
-        initDist: 0, initAngle: 0,
-        initScale: propsRef.current.scale,
-        initRotation: propsRef.current.rotation,
-        downTime: Date.now(),
-        downClientX: e.clientX,
-        downClientY: e.clientY,
-      };
+      // 1st finger
+      startDrag(e.clientX, e.clientY, true);
     }
   };
 
+  // ── Pointer move ──────────────────────────────────────────────────────────
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!ptrs.current.has(e.pointerId)) return;
     e.preventDefault();
@@ -205,19 +226,30 @@ export function Token({
     const pts = pairList();
 
     if (pts.length >= 2) {
-      // switch to transform if not already
+      // ── Two-finger: rotate + scale + translate ─────────────────────────
       if (g.mode !== 'transform') {
-        baselineTransform(pts);
-        return;
+        rebaseTransform(pts);
+        return; // next event will have stable baseline
       }
 
       const [a, b] = pts;
-      const curDist  = dist(a, b);
-      const curAngle = angle(a, b);
+      const curAngle = fingerAngle(a, b);
+      const curDist  = fingerDist(a, b);
 
-      const newScale    = clampScale(g.initScale * (g.initDist > 0 ? curDist / g.initDist : 1));
-      const newRotation = normRot(g.initRotation + (curAngle - g.initAngle));
-      const center      = toCanvas((a.x + b.x) / 2, (a.y + b.y) / 2);
+      // Incremental deltas — angle uses shortestDelta to handle ±180° wrap
+      const angleDelta  = shortestDelta(g.prevAngle, curAngle);
+      const scaleRatio  = g.prevDist > 0 ? curDist / g.prevDist : 1;
+
+      const newRotation = normRot(g.prevRotation + angleDelta);
+      const newScale    = clampScale(g.prevScale * scaleRatio);
+
+      // Update per-frame state (carry forward for next event)
+      g.prevAngle    = curAngle;
+      g.prevDist     = curDist;
+      g.prevRotation = newRotation;
+      g.prevScale    = newScale;
+
+      const center = toCanvas((a.x + b.x) / 2, (a.y + b.y) / 2);
 
       const cb = cbRef.current;
       const tid = propsRef.current.id;
@@ -226,8 +258,8 @@ export function Token({
       if (cb.onScale) cb.onScale(tid, Math.round(newScale * 1000) / 1000);
 
     } else {
-      // 1-finger drag — do NOT move if we're mid-transform (wait for finger lift)
-      if (g.mode === 'transform') return;
+      // ── One-finger drag ────────────────────────────────────────────────
+      if (g.mode === 'transform') return; // mid-transform, skip until rebaselined
 
       const startCanvas = toCanvas(g.startClientX, g.startClientY);
       const curCanvas   = toCanvas(e.clientX, e.clientY);
@@ -238,6 +270,7 @@ export function Token({
     }
   };
 
+  // ── Pointer up / cancel ───────────────────────────────────────────────────
   const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     ptrs.current.delete(e.pointerId);
@@ -246,11 +279,13 @@ export function Token({
     const pts = pairList();
 
     if (pts.length === 0) {
-      // all fingers up
+      // All fingers lifted
       setIsActive(false);
 
       if (g) {
-        const d   = Math.hypot(e.clientX - g.downClientX, e.clientY - g.downClientY);
+        const dx  = e.clientX - g.downClientX;
+        const dy  = e.clientY - g.downClientY;
+        const d   = Math.hypot(dx, dy);
         const dur = Date.now() - g.downTime;
         const tid = propsRef.current.id;
 
@@ -264,7 +299,7 @@ export function Token({
       gst.current = null;
 
     } else if (pts.length === 1) {
-      // one finger remains: re-baseline drag from CURRENT token position
+      // One finger remains — switch to drag from current token position
       const [pt] = pts;
       const p = propsRef.current;
       gst.current = {
@@ -273,19 +308,20 @@ export function Token({
         startClientY: pt.y,
         startTokenX: p.x,
         startTokenY: p.y,
-        initDist: 0, initAngle: 0,
-        initScale: p.scale, initRotation: p.rotation,
+        prevAngle: 0, prevDist: 0,
+        prevRotation: g?.prevRotation ?? p.rotation,
+        prevScale: g?.prevScale ?? p.scale,
         downTime: g?.downTime ?? Date.now(),
         downClientX: g?.downClientX ?? pt.x,
         downClientY: g?.downClientY ?? pt.y,
       };
     } else {
-      // still 2+ fingers: re-baseline transform
-      baselineTransform(pts);
+      // Still 2+ fingers — re-baseline transform, carry rotation/scale
+      rebaseTransform(pts);
     }
   };
 
-  // Mouse fallback for desktop
+  // ── Mouse fallback (desktop) ──────────────────────────────────────────────
   const onMouseDown = (e: ReactMouseEvent) => {
     if ((e.target as HTMLElement).tagName === 'INPUT' ||
         (e.target as HTMLElement).tagName === 'TEXTAREA') return;
