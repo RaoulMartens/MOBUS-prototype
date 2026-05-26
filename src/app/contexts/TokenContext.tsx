@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { db } from '../../../../src/firebase';
+import { db } from '../../firebase';
 import {
   collection,
   doc,
@@ -14,8 +14,12 @@ export interface Token {
   id: string;
   text: string;
   description?: string;
+  drawingDataUrl?: string | null;
+  drawingPath?: string | null;
   clusterId: string | null;
   position: { x: number; y: number };
+  rotation: number;
+  scale: number;
   createdAt: string;
 }
 
@@ -39,10 +43,15 @@ interface TokenContextType {
   events: TokenEvent[];
   loading: boolean;
   backendConnected: boolean;
+  sessionId: string;
+  updateSessionId: (id: string) => void;
   addToken: (text: string, position: { x: number; y: number }, description?: string) => Promise<void>;
   updateTokenPosition: (id: string, position: { x: number; y: number }) => Promise<void>;
+  updateTokenRotation: (id: string, rotation: number) => Promise<void>;
+  updateTokenScale: (id: string, scale: number) => Promise<void>;
   updateTokenText: (id: string, text: string) => Promise<void>;
   updateTokenDescription: (id: string, description: string) => Promise<void>;
+  archiveToken: (id: string) => Promise<void>;
   deleteToken: (id: string) => Promise<void>;
   deleteAllTokens: () => Promise<void>;
   createCluster: (name: string, tokenIds: string[]) => Promise<void>;
@@ -53,20 +62,24 @@ interface TokenContextType {
 
 const TokenContext = createContext<TokenContextType | undefined>(undefined);
 
+const normalizeSessionId = (value: string): string => {
+  const trimmed = value.trim();
+  return /^\d+$/.test(trimmed) ? `mobus-${trimmed}` : trimmed;
+};
+
 // Helper to determine the session ID
 const getSessionId = (): string => {
   const urlParams = new URLSearchParams(window.location.search);
   const urlSession = urlParams.get("sessionId");
   if (urlSession) {
-    localStorage.setItem("sessionId", urlSession);
-    return urlSession;
+    const normalized = normalizeSessionId(urlSession);
+    localStorage.setItem("sessionId", normalized);
+    return normalized;
   }
   const storedSession = localStorage.getItem("sessionId");
-  if (storedSession) return storedSession;
+  if (storedSession) return normalizeSessionId(storedSession);
   return "mobus-tafel-88"; // default matching simulated scanner
 };
-
-const sessionId = getSessionId();
 
 export function TokenProvider({ children }: { children: ReactNode }) {
   const [tokens, setTokens] = useState<Token[]>([]);
@@ -74,6 +87,13 @@ export function TokenProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<TokenEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [backendConnected, setBackendConnected] = useState(false);
+  const [sessionId, setSessionId] = useState(() => getSessionId());
+
+  const updateSessionId = (id: string) => {
+    const normalized = normalizeSessionId(id);
+    localStorage.setItem("sessionId", normalized);
+    setSessionId(normalized);
+  };
 
   // Sync with Firestore in real-time
   useEffect(() => {
@@ -94,10 +114,14 @@ export function TokenProvider({ children }: { children: ReactNode }) {
             id: docSnap.id,
             text: data.title || data.text || "",
             description: data.description || "",
+            drawingDataUrl: data.drawingDataUrl || data.sketch || null,
+            drawingPath: data.drawingPath || null,
             clusterId: data.clusterId !== undefined ? data.clusterId : (data.cluster || null),
             position: data.position && typeof data.position.x === 'number' && typeof data.position.y === 'number'
               ? { x: data.position.x, y: data.position.y }
               : { x: 300 + Math.random() * 400, y: 200 + Math.random() * 300 },
+            rotation: typeof data.rotation === 'number' ? data.rotation : 0,
+            scale: typeof data.scale === 'number' ? data.scale : 1,
             createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || new Date().toISOString(),
           });
         });
@@ -174,7 +198,7 @@ export function TokenProvider({ children }: { children: ReactNode }) {
       unsubscribeClusters();
       unsubscribeEvents();
     };
-  }, []);
+  }, [sessionId]);
 
   const addToken = async (text: string, position: { x: number; y: number }, description?: string) => {
     const tokenId = `token-${Date.now()}-${Math.random()}`;
@@ -187,9 +211,13 @@ export function TokenProvider({ children }: { children: ReactNode }) {
       title: text,
       text: text,
       description: description || "",
+      drawingDataUrl: null,
+      drawingPath: null,
       clusterId: null,
       cluster: null,
       position: position,
+      rotation: 0,
+      scale: 1,
       status: "active",
       archived: false,
       source: "table",
@@ -214,6 +242,24 @@ export function TokenProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateTokenRotation = async (id: string, rotation: number) => {
+    const docRef = doc(db, "sessions", sessionId, "tokens", id);
+    try {
+      await setDoc(docRef, { rotation, updatedAt: new Date().toISOString() }, { merge: true });
+    } catch (error) {
+      console.error("Error updating token rotation:", error);
+    }
+  };
+
+  const updateTokenScale = async (id: string, scale: number) => {
+    const docRef = doc(db, "sessions", sessionId, "tokens", id);
+    try {
+      await setDoc(docRef, { scale, updatedAt: new Date().toISOString() }, { merge: true });
+    } catch (error) {
+      console.error("Error updating token scale:", error);
+    }
+  };
+
   const updateTokenText = async (id: string, text: string) => {
     const docRef = doc(db, "sessions", sessionId, "tokens", id);
     try {
@@ -229,6 +275,24 @@ export function TokenProvider({ children }: { children: ReactNode }) {
       await setDoc(docRef, { description, updatedAt: new Date().toISOString() }, { merge: true });
     } catch (error) {
       console.error("Error updating token description:", error);
+    }
+  };
+
+  const archiveToken = async (id: string) => {
+    const docRef = doc(db, "sessions", sessionId, "tokens", id);
+    try {
+      const token = tokens.find((t) => t.id === id);
+      const label = token?.text || "Unknown";
+      await setDoc(docRef, {
+        archived: true,
+        status: "archived",
+        clusterId: null,
+        cluster: null,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+      await addEvent("moved", `Token "${label}" parked outside active table space`);
+    } catch (error) {
+      console.error("Error archiving token:", error);
     }
   };
 
@@ -398,10 +462,15 @@ export function TokenProvider({ children }: { children: ReactNode }) {
         events,
         loading,
         backendConnected,
+        sessionId,
+        updateSessionId,
         addToken,
         updateTokenPosition,
+        updateTokenRotation,
+        updateTokenScale,
         updateTokenText,
         updateTokenDescription,
+        archiveToken,
         deleteToken,
         deleteAllTokens,
         createCluster,
