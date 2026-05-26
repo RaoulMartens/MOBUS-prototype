@@ -771,14 +771,6 @@ export function TokenClusteringCanvas() {
                   <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
                     Scan met je telefoon
                   </span>
-                  <a
-                    href={`/phone?sessionId=${sessionId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs font-bold text-zinc-950 underline hover:text-zinc-700 transition-colors"
-                  >
-                    Open op deze computer
-                  </a>
                 </div>
 
                 {/* Divider */}
