@@ -1,5 +1,21 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useTokens } from '../contexts/TokenContext';
+import { QRCodeSVG } from 'qrcode.react';
+
+// Network IPs injected by Vite at build time
+declare const __NETWORK_IPS__: string[];
+const networkIPs: string[] = typeof __NETWORK_IPS__ !== 'undefined' ? __NETWORK_IPS__ : [];
+
+const getNetworkPhoneUrl = (sessionId: string): string => {
+  const { hostname, port, protocol } = window.location;
+  if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    return `${protocol}//${hostname}${port ? ':' + port : ''}/phone?sessionId=${sessionId}`;
+  }
+  if (networkIPs.length > 0) {
+    return `${protocol}//${networkIPs[0]}${port ? ':' + port : ''}/phone?sessionId=${sessionId}`;
+  }
+  return `${window.location.origin}/phone?sessionId=${sessionId}`;
+};
 
 // ── Suggestion templates per cluster size ──
 const SUGGESTIONS_2 = [
@@ -232,17 +248,36 @@ export function SystemInsights() {
               <h1 style={styles.title}>Overzicht</h1>
               <p style={styles.subtitle}>Terwijl jullie ideeën groeien, ontdekt MOBUS patronen, connecties en nieuwe richtingen om samen te verkennen.</p>
             </div>
-            <div style={{
-              ...styles.thinkingIndicator,
-              opacity: isThinking ? 1 : 0.45
-            }}>
-              <span
-                className={isThinking ? "pulse-active" : ""}
-                style={isThinking ? styles.thinkingDotActive : styles.thinkingDotIdle}
-              />
-              <span style={styles.thinkingText}>
-                {isThinking ? "MOBUS denkt mee" : "MOBUS stand-by"}
-              </span>
+            
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              {/* QR Code pairing badge */}
+              <div style={styles.qrCodeBadge}>
+                <div style={styles.qrCodeSVGContainer}>
+                  <QRCodeSVG
+                    value={getNetworkPhoneUrl(sessionId)}
+                    size={48}
+                    bgColor="#ffffff"
+                    fgColor="#09090b"
+                  />
+                </div>
+                <div style={styles.qrCodeTextContainer}>
+                  <span style={styles.qrCodeTitle}>Koppel telefoon</span>
+                  <span style={styles.qrCodeSession}>Sessie: <strong style={{ fontFamily: 'monospace' }}>{sessionId.replace(/^mobus-/, '')}</strong></span>
+                </div>
+              </div>
+
+              <div style={{
+                ...styles.thinkingIndicator,
+                opacity: isThinking ? 1 : 0.45
+              }}>
+                <span
+                  className={isThinking ? "pulse-active" : ""}
+                  style={isThinking ? styles.thinkingDotActive : styles.thinkingDotIdle}
+                />
+                <span style={styles.thinkingText}>
+                  {isThinking ? "MOBUS denkt mee" : "MOBUS stand-by"}
+                </span>
+              </div>
             </div>
           </div>
         </header>
@@ -507,6 +542,40 @@ const styles: Record<string, React.CSSProperties> = {
   },
   loadingText: {
     fontSize: '1rem',
+    color: '#71717a',
+  },
+  qrCodeBadge: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.6rem',
+    backgroundColor: '#ffffff',
+    border: '1px solid #a1a1aa',
+    borderRadius: 4,
+    padding: '0.4rem 0.6rem',
+  },
+  qrCodeSVGContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0.15rem',
+    backgroundColor: '#ffffff',
+    border: '1px solid #e4e4e7',
+    borderRadius: 2,
+  },
+  qrCodeTextContainer: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.1rem',
+  },
+  qrCodeTitle: {
+    fontSize: '0.65rem',
+    fontWeight: 700,
+    color: '#09090b',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+  },
+  qrCodeSession: {
+    fontSize: '0.75rem',
     color: '#71717a',
   },
 };

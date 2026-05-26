@@ -3,26 +3,7 @@ import { Token } from './Token';
 import { useTokens } from '../contexts/TokenContext';
 import { Card, CardContent } from './ui/card';
 import { Sparkles } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
-
-// Network IPs injected by Vite at build time
-declare const __NETWORK_IPS__: string[];
-const networkIPs: string[] = typeof __NETWORK_IPS__ !== 'undefined' ? __NETWORK_IPS__ : [];
-
-/** Build a phone URL that works from another device on the same network */
-const getNetworkPhoneUrl = (sessionId: string): string => {
-  const { hostname, port, protocol } = window.location;
-  // If already on a network IP, use it directly
-  if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-    return `${protocol}//${hostname}${port ? ':' + port : ''}/phone?sessionId=${sessionId}`;
-  }
-  // Otherwise, use the first detected network IP
-  if (networkIPs.length > 0) {
-    return `${protocol}//${networkIPs[0]}${port ? ':' + port : ''}/phone?sessionId=${sessionId}`;
-  }
-  // Fallback
-  return `${window.location.origin}/phone?sessionId=${sessionId}`;
-};
+import { TableEmptyState } from './TableEmptyState';
 
 interface CanvasToken {
   id: string;
@@ -652,8 +633,6 @@ export function TokenClusteringCanvas() {
 
   const currentHint = getHelpHint();
   const drawingThumbnailIds = getDrawingThumbnailIds();
-  const sessionCode = sessionId.replace(/^mobus-/, '');
-  const phoneUrl = getNetworkPhoneUrl(sessionId);
   const showStartState = !loading && canvasTokens.length === 0;
 
   // Dimming evaluation
@@ -746,51 +725,9 @@ export function TokenClusteringCanvas() {
 
       <div ref={canvasRef} className="w-full h-full relative" onClick={handleCanvasClick}>
         {showStartState && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center px-6 pointer-events-none">
-            <div className="max-w-xl text-center pointer-events-auto">
-
-              <h1 className="text-4xl md:text-5xl font-black tracking-tight text-zinc-950 mb-4">
-                Sessie gestart
-              </h1>
-              <p className="text-base md:text-lg text-zinc-600 mb-8">
-                Verbind je telefoon om je eerste idee toe te voegen.
-              </p>
-
-              <div className="inline-flex flex-col md:flex-row items-center gap-8 bg-white px-10 py-8 rounded shadow-sm mb-7">
-                {/* QR Code */}
-                <div className="flex flex-col items-center gap-3">
-                  <div className="p-3 bg-white rounded-lg border border-zinc-200">
-                    <QRCodeSVG
-                      value={phoneUrl}
-                      size={160}
-                      level="M"
-                      bgColor="#ffffff"
-                      fgColor="#09090b"
-                    />
-                  </div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-                    Scan met je telefoon
-                  </span>
-                </div>
-
-                {/* Divider */}
-                <div className="hidden md:block w-px h-40 bg-zinc-200" />
-                <div className="block md:hidden h-px w-40 bg-zinc-200" />
-
-                {/* Session code */}
-                <div className="flex flex-col items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">
-                    Sessiecode
-                  </span>
-                  <span className="text-6xl font-black font-mono tracking-widest text-zinc-950">
-                    {sessionCode}
-                  </span>
-                </div>
-              </div>
-
-            </div>
-          </div>
+          <TableEmptyState />
         )}
+
 
         {/* Connection lines */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
