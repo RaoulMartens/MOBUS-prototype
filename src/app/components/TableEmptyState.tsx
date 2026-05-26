@@ -126,15 +126,17 @@ export function TableEmptyState() {
       {/* Moving Text Group (Bouncing standby DVD screensaver style) */}
       <div
         ref={textRef}
-        className="absolute left-0 top-0 w-80 text-center px-4 animate-fade-in z-10"
+        className="absolute left-0 top-0 w-80 text-center px-4 z-10"
         style={{ transform: 'translate3d(50vw, 50vh, 0)' }}
       >
-        <h2 className="text-xl md:text-2xl font-black text-zinc-400 dark:text-zinc-650 tracking-tight mb-2">
-          Nog geen ideeën op tafel
-        </h2>
-        <p className="text-xs md:text-sm text-zinc-400/80 dark:text-zinc-500 font-medium">
-          Voeg een idee toe via je telefoon.
-        </p>
+        <div className="animate-fade-in">
+          <h2 className="text-xl md:text-2xl font-black text-zinc-400 dark:text-zinc-650 tracking-tight mb-2">
+            Nog geen ideeën op tafel
+          </h2>
+          <p className="text-xs md:text-sm text-zinc-400/80 dark:text-zinc-500 font-medium">
+            Voeg een idee toe via je telefoon.
+          </p>
+        </div>
       </div>
 
     </div>
