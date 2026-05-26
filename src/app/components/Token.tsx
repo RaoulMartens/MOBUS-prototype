@@ -47,7 +47,7 @@ export function Token({
   const ref = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const [justCreated, setJustCreated] = useState(false);
+  const [justCreated, setJustCreated] = useState(true);
 
 
   const dragStartPos = useRef({ x: 0, y: 0 });
@@ -55,8 +55,7 @@ export function Token({
 
   // Entry animation
   useEffect(() => {
-    setJustCreated(true);
-    const timer = setTimeout(() => setJustCreated(false), 600);
+    const timer = setTimeout(() => setJustCreated(false), 1200);
     return () => clearTimeout(timer);
   }, []);
 
@@ -236,18 +235,46 @@ export function Token({
       onMouseLeave={() => {
         setIsHovered(false);
       }}
-      className="select-none touch-none"
+      className="select-none touch-none token-container"
       style={{
         position: 'absolute',
         left: x,
         top: y,
-        transform: `translate(-50%, -50%) rotate(${rotation}deg) scale(${scale * (isDragging ? 1.05 : (isHovered && !isDimmed) ? 1.02 : 1) * (isDimmed ? 0.9 : 1)}) ${justCreated ? 'scale(0)' : ''}`,
+        transform: `translate(-50%, -50%) rotate(${rotation}deg) scale(${scale * (isDragging ? 1.05 : (isHovered && !isDimmed) ? 1.02 : 1) * (isDimmed ? 0.9 : 1)})`,
         cursor: isDimmed ? 'pointer' : isDragging ? 'grabbing' : 'grab',
-        transition: justCreated ? 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)' : 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-out',
+        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-out',
         zIndex: isDragging ? 1000 : isSelected ? 900 : isHovered ? 100 : 10,
         opacity: isDimmed ? 0.2 : 1,
       }}
     >
+      {/* Expanding ripples under token on spawn */}
+      {justCreated && (
+        <>
+          <div
+            className="rounded-full border border-zinc-500 pointer-events-none animate-token-ripple-1"
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: -1,
+            }}
+          />
+          <div
+            className="rounded-full border border-zinc-500 pointer-events-none animate-token-ripple-2"
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: -1,
+            }}
+          />
+        </>
+      )}
+
+      {/* Inner wrapper for entry scale animation */}
+      <div className={justCreated ? "animate-token-spawn" : ""} style={{ transformOrigin: 'center' }}>
 
 
       {/* Central Circle Orb */}
@@ -316,6 +343,7 @@ export function Token({
           </p>
         </div>
       )}
+      </div>
 
     </div>
   );

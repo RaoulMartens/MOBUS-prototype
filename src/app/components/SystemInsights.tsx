@@ -229,8 +229,44 @@ export function SystemInsights() {
   const hasIdeas = tokens.length > 0;
   const hasClusters = clusterCards.length > 0;
 
+  if (!hasIdeas) {
+    return (
+      <div style={styles.landingRoot} className="animate-fade-in">
+        <div style={styles.landingContainer}>
+          <h1 style={styles.landingTitle}>Sessie gestart</h1>
+          <p style={styles.landingSubtitle}>
+            Verbind je telefoon om je eerste idee toe te voegen.
+          </p>
+
+          <div style={styles.landingCard}>
+            <div style={styles.landingCardLeft}>
+              <div style={styles.landingQrWrapper}>
+                <QRCodeSVG
+                  value={getNetworkPhoneUrl(sessionId)}
+                  size={120}
+                  bgColor="#ffffff"
+                  fgColor="#09090b"
+                />
+              </div>
+              <span style={styles.landingCardLabel}>SCAN MET JE TELEFOON</span>
+            </div>
+
+            <div style={styles.landingDivider} />
+
+            <div style={styles.landingCardRight}>
+              <span style={styles.landingCardLabel}>SESSIECODE</span>
+              <span style={styles.landingSessionCode}>
+                {sessionId.replace(/^mobus-/, '')}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={styles.root}>
+    <div style={styles.root} className="animate-fade-in">
       <style>{`
         @keyframes thinking-pulse {
           0% { box-shadow: 0 0 0 0 rgba(127, 211, 140, 0.7); }
@@ -239,6 +275,13 @@ export function SystemInsights() {
         }
         .pulse-active {
           animation: thinking-pulse 1.6s infinite;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.4s ease-out forwards;
         }
       `}</style>
       <div style={styles.container}>
@@ -281,16 +324,6 @@ export function SystemInsights() {
             </div>
           </div>
         </header>
-
-        {/* ── Empty: no ideas at all ── */}
-        {!hasIdeas && (
-          <div style={styles.emptyState}>
-            <p style={styles.emptyTitle}>Nog geen ideeën</p>
-            <p style={styles.emptyDesc}>
-              Voeg ideeën toe via de mobiele app. Ze verschijnen hier zodra er groepjes ontstaan op de tafel.
-            </p>
-          </div>
-        )}
 
         {/* ── Ideas exist but no clusters yet ── */}
         {hasIdeas && !hasClusters && (
@@ -577,5 +610,85 @@ const styles: Record<string, React.CSSProperties> = {
   qrCodeSession: {
     fontSize: '0.75rem',
     color: '#71717a',
+  },
+  landingRoot: {
+    width: '100vw',
+    height: '100vh',
+    backgroundColor: '#f4f4f5',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+    color: '#09090b',
+  },
+  landingContainer: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
+    textAlign: 'center' as const,
+    gap: '1rem',
+  },
+  landingTitle: {
+    fontSize: '2.5rem',
+    fontWeight: 800,
+    margin: 0,
+    letterSpacing: '-0.02em',
+    color: '#09090b',
+  },
+  landingSubtitle: {
+    fontSize: '1.1rem',
+    color: '#52525b',
+    margin: '0 0 1.5rem 0',
+  },
+  landingCard: {
+    backgroundColor: '#ffffff',
+    border: '1px solid #e4e4e7',
+    borderRadius: 8,
+    padding: '2.5rem 3rem',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '2.5rem',
+  },
+  landingCardLeft: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    gap: '0.75rem',
+  },
+  landingQrWrapper: {
+    padding: '0.5rem',
+    backgroundColor: '#ffffff',
+    border: '1px solid #e4e4e7',
+    borderRadius: 4,
+  },
+  landingCardLabel: {
+    fontSize: '0.65rem',
+    fontWeight: 700,
+    color: '#71717a',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.1em',
+  },
+  landingDivider: {
+    width: 1,
+    height: 120,
+    backgroundColor: '#e4e4e7',
+  },
+  landingCardRight: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.75rem',
+    minWidth: 160,
+  },
+  landingSessionCode: {
+    fontSize: '3.25rem',
+    fontWeight: 800,
+    fontFamily: "monospace, 'Courier New', Courier",
+    color: '#09090b',
+    letterSpacing: '0.05em',
+    lineHeight: 1,
   },
 };

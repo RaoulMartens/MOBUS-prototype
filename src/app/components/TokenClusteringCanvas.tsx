@@ -1108,6 +1108,52 @@ export function TokenClusteringCanvas() {
         .animate-html-ripple-unsnap {
           animation: htmlRippleUnsnap 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
         }
+        .token-container {
+          transition-property: transform, opacity !important;
+        }
+        .animate-token-spawn {
+          animation: tokenSpawn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+          transform-origin: center;
+        }
+        @keyframes tokenSpawn {
+          0% {
+            opacity: 0;
+            transform: scale(0);
+          }
+          55% {
+            opacity: 1;
+            transform: scale(1.12);
+          }
+          75% {
+            transform: scale(0.97);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+        .animate-token-ripple-1 {
+          animation: tokenRipple 1.0s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+        }
+        .animate-token-ripple-2 {
+          animation: tokenRipple 1.0s cubic-bezier(0.1, 0.8, 0.3, 1) 0.15s forwards;
+        }
+        @keyframes tokenRipple {
+          0% {
+            width: 40px;
+            height: 40px;
+            opacity: 0.8;
+            transform: translate(-50%, -50%) scale(0.8);
+            border-width: 2px;
+          }
+          100% {
+            width: 280px;
+            height: 280px;
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(1.4);
+            border-width: 0.5px;
+          }
+        }
       `}</style>
     </div>
   );
