@@ -25,6 +25,7 @@ export function ExperienceInfo() {
   const handleContinue = () => {
     const sessionId = createSessionId();
     updateSessionId(sessionId);
+    window.open(`/dev/wall?sessionId=${sessionId}`, '_blank');
     navigate(`/table?sessionId=${sessionId}`);
   };
 
