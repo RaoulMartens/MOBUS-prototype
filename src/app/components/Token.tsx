@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useRef, useState, useEffect, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from 'react';
 
 interface TokenProps {
   id: string;
@@ -62,18 +62,29 @@ export function Token({
   status = "active",
   ai_metadata = null,
 }: TokenProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [isActive, setIsActive] = useState(false);   // any pointer down
+  const divRef = useRef<HTMLDivElement>(null);
+  const [isActive, setIsActive] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [justCreated, setJustCreated] = useState(true);
 
-  // Per-token active pointer map: pointerId -> {clientX, clientY}
-  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  // ── Stable refs: always current, never stale in handlers ─────────────────
+  const propsRef = useRef({ id, x, y, scale, rotation, isSelected });
+  useEffect(() => {
+    propsRef.current = { id, x, y, scale, rotation, isSelected };
+  });
 
-  // Gesture baseline (set when 2nd finger lands or drag starts)
-  const gesture = useRef<{
+  const cbRef = useRef({ onMove, onRotate, onRelease, onSelect, onScale });
+  useEffect(() => {
+    cbRef.current = { onMove, onRotate, onRelease, onSelect, onScale };
+  });
+
+  // ── Per-token pointer tracking ────────────────────────────────────────────
+  const ptrs = useRef<Map<number, { x: number; y: number }>>(new Map());
+
+  // ── Gesture state (all in ref, no React state) ────────────────────────────
+  const gst = useRef<{
     mode: 'drag' | 'transform';
-    // drag
+    // drag baseline
     startClientX: number;
     startClientY: number;
     startTokenX: number;
@@ -83,86 +94,72 @@ export function Token({
     initAngle: number;
     initScale: number;
     initRotation: number;
-    initCenterX: number; // token x when transform started
-    initCenterY: number;
-    // tap detection
+    // tap
     downTime: number;
     downClientX: number;
     downClientY: number;
   } | null>(null);
 
-  // Entry animation
   useEffect(() => {
-    const timer = setTimeout(() => setJustCreated(false), 1200);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => setJustCreated(false), 1200);
+    return () => clearTimeout(t);
   }, []);
 
-  const getPointerPair = () => {
-    const pts = Array.from(pointers.current.values());
-    return pts.length >= 2 ? pts : null;
-  };
-
-  const getPairDist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
     Math.hypot(b.x - a.x, b.y - a.y);
 
-  const getPairAngle = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+  const angle = (a: { x: number; y: number }, b: { x: number; y: number }) =>
     Math.atan2(b.y - a.y, b.x - a.x) * (180 / Math.PI);
-
-  const normalizeRotation = (v: number) =>
-    Math.round((((v % 360) + 360) % 360) * 10) / 10;
-
-  const toParentCoords = (clientX: number, clientY: number) => {
-    const parent = ref.current?.parentElement;
-    if (!parent) return { x: clientX, y: clientY };
-    const rect = parent.getBoundingClientRect();
-    return { x: clientX - rect.left, y: clientY - rect.top };
-  };
 
   const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
 
-  // ── Drag mode baseline ──────────────────────────────────────────────────────
-  const startDrag = (clientX: number, clientY: number) => {
-    gesture.current = {
+  const toCanvas = (clientX: number, clientY: number) => {
+    const parent = divRef.current?.parentElement;
+    if (!parent) return { x: clientX, y: clientY };
+    const r = parent.getBoundingClientRect();
+    return { x: clientX - r.left, y: clientY - r.top };
+  };
+
+  const normRot = (v: number) => (((v % 360) + 360) % 360);
+
+  const pairList = () => Array.from(ptrs.current.values());
+
+  const baselineDrag = (clientX: number, clientY: number) => {
+    const p = propsRef.current;
+    gst.current = {
       mode: 'drag',
       startClientX: clientX,
       startClientY: clientY,
-      startTokenX: x,
-      startTokenY: y,
-      initDist: 0,
-      initAngle: 0,
-      initScale: scale,
-      initRotation: rotation,
-      initCenterX: x,
-      initCenterY: y,
-      downTime: Date.now(),
-      downClientX: clientX,
-      downClientY: clientY,
+      startTokenX: p.x,
+      startTokenY: p.y,
+      initDist: 0, initAngle: 0,
+      initScale: p.scale, initRotation: p.rotation,
+      downTime: gst.current?.downTime ?? Date.now(),
+      downClientX: gst.current?.downClientX ?? clientX,
+      downClientY: gst.current?.downClientY ?? clientY,
     };
   };
 
-  // ── Transform mode baseline ─────────────────────────────────────────────────
-  const startTransform = (pts: { x: number; y: number }[]) => {
+  const baselineTransform = (pts: { x: number; y: number }[]) => {
     const [a, b] = pts;
-    gesture.current = {
+    const p = propsRef.current;
+    gst.current = {
       mode: 'transform',
-      startClientX: 0,
-      startClientY: 0,
-      startTokenX: x,
-      startTokenY: y,
-      initDist: getPairDist(a, b),
-      initAngle: getPairAngle(a, b),
-      initScale: scale,
-      initRotation: rotation,
-      initCenterX: x,
-      initCenterY: y,
-      downTime: gesture.current?.downTime ?? Date.now(),
-      downClientX: gesture.current?.downClientX ?? (a.x + b.x) / 2,
-      downClientY: gesture.current?.downClientY ?? (a.y + b.y) / 2,
+      startClientX: 0, startClientY: 0,
+      startTokenX: p.x, startTokenY: p.y,
+      initDist: dist(a, b),
+      initAngle: angle(a, b),
+      initScale: p.scale,
+      initRotation: p.rotation,
+      downTime: gst.current?.downTime ?? Date.now(),
+      downClientX: gst.current?.downClientX ?? (a.x + b.x) / 2,
+      downClientY: gst.current?.downClientY ?? (a.y + b.y) / 2,
     };
   };
 
-  // ── Pointer down ────────────────────────────────────────────────────────────
-  const handlePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+  // ── Pointer handlers (defined once, read only from refs) ──────────────────
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).tagName === 'INPUT' ||
         (e.target as HTMLElement).tagName === 'TEXTAREA') return;
 
@@ -170,165 +167,168 @@ export function Token({
     e.stopPropagation();
     (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
 
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     setIsActive(true);
-    onSelect(id);
+    cbRef.current.onSelect(propsRef.current.id);
 
-    const pts = Array.from(pointers.current.values());
-
+    const pts = pairList();
     if (pts.length >= 2) {
-      // 2nd finger — switch to transform
-      startTransform(pts);
+      baselineTransform(pts);
     } else {
-      // 1st finger — drag
-      startDrag(e.clientX, e.clientY);
+      // first finger — record tap info fresh
+      gst.current = null; // reset so baselineDrag sets downTime/downClient
+      gst.current = {
+        mode: 'drag',
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startTokenX: propsRef.current.x,
+        startTokenY: propsRef.current.y,
+        initDist: 0, initAngle: 0,
+        initScale: propsRef.current.scale,
+        initRotation: propsRef.current.rotation,
+        downTime: Date.now(),
+        downClientX: e.clientX,
+        downClientY: e.clientY,
+      };
     }
-  }, [x, y, scale, rotation, id]);
+  };
 
-  // ── Pointer move ────────────────────────────────────────────────────────────
-  const handlePointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!pointers.current.has(e.pointerId)) return;
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!ptrs.current.has(e.pointerId)) return;
     e.preventDefault();
 
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-    const g = gesture.current;
+    const g = gst.current;
     if (!g) return;
 
-    const pts = Array.from(pointers.current.values());
+    const pts = pairList();
 
     if (pts.length >= 2) {
-      // ── Two-finger: rotate + scale + translate ───────────────────────────
+      // switch to transform if not already
       if (g.mode !== 'transform') {
-        startTransform(pts);
+        baselineTransform(pts);
         return;
       }
 
       const [a, b] = pts;
-      const currentDist = getPairDist(a, b);
-      const currentAngle = getPairAngle(a, b);
+      const curDist  = dist(a, b);
+      const curAngle = angle(a, b);
 
-      const distRatio = g.initDist > 0 ? currentDist / g.initDist : 1;
-      const newScale = clampScale(g.initScale * distRatio);
-      const angleDiff = currentAngle - g.initAngle;
-      const newRotation = normalizeRotation(g.initRotation + angleDiff);
+      const newScale    = clampScale(g.initScale * (g.initDist > 0 ? curDist / g.initDist : 1));
+      const newRotation = normRot(g.initRotation + (curAngle - g.initAngle));
+      const center      = toCanvas((a.x + b.x) / 2, (a.y + b.y) / 2);
 
-      // Center of two fingers → token position
-      const center = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      const parentCoords = toParentCoords(center.x, center.y);
-
-      onMove(id, parentCoords.x, parentCoords.y);
-      onRotate(id, newRotation);
-      if (onScale) onScale(id, Math.round(newScale * 1000) / 1000);
+      const cb = cbRef.current;
+      const tid = propsRef.current.id;
+      cb.onMove(tid, center.x, center.y);
+      cb.onRotate(tid, Math.round(newRotation * 10) / 10);
+      if (cb.onScale) cb.onScale(tid, Math.round(newScale * 1000) / 1000);
 
     } else {
-      // ── One-finger drag ──────────────────────────────────────────────────
-      if (g.mode === 'transform') return; // wait until finger count drops before switching back
+      // 1-finger drag — do NOT move if we're mid-transform (wait for finger lift)
+      if (g.mode === 'transform') return;
 
-      const dx = e.clientX - g.startClientX;
-      const dy = e.clientY - g.startClientY;
-      const parentBase = toParentCoords(g.startClientX, g.startClientY);
-      const parentNew  = toParentCoords(e.clientX, e.clientY);
+      const startCanvas = toCanvas(g.startClientX, g.startClientY);
+      const curCanvas   = toCanvas(e.clientX, e.clientY);
+      const newX = g.startTokenX + (curCanvas.x - startCanvas.x);
+      const newY = g.startTokenY + (curCanvas.y - startCanvas.y);
 
-      void dx; void dy; // used implicitly via parentNew - parentBase shift
-      const newX = g.startTokenX + (parentNew.x - parentBase.x);
-      const newY = g.startTokenY + (parentNew.y - parentBase.y);
-
-      onMove(id, newX, newY);
+      cbRef.current.onMove(propsRef.current.id, newX, newY);
     }
-  }, [id, onMove, onRotate, onScale]);
+  };
 
-  // ── Pointer up / cancel ─────────────────────────────────────────────────────
-  const handlePointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+  const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.preventDefault();
+    ptrs.current.delete(e.pointerId);
 
-    pointers.current.delete(e.pointerId);
-    const pts = Array.from(pointers.current.values());
+    const g = gst.current;
+    const pts = pairList();
 
     if (pts.length === 0) {
-      // All fingers lifted
-      const g = gesture.current;
+      // all fingers up
       setIsActive(false);
 
       if (g) {
-        // Tap detection
-        const dist = Math.hypot(e.clientX - g.downClientX, e.clientY - g.downClientY);
-        const dur  = Date.now() - g.downTime;
+        const d   = Math.hypot(e.clientX - g.downClientX, e.clientY - g.downClientY);
+        const dur = Date.now() - g.downTime;
+        const tid = propsRef.current.id;
 
-        if (g.mode === 'drag' && dist < 8 && dur < 300) {
-          onSelect(isSelected ? null : id);
+        if (g.mode === 'drag' && d < 8 && dur < 300) {
+          cbRef.current.onSelect(propsRef.current.isSelected ? null : tid);
         } else {
-          const coords = toParentCoords(e.clientX, e.clientY);
-          onRelease(id, coords.x, coords.y);
+          const c = toCanvas(e.clientX, e.clientY);
+          cbRef.current.onRelease(tid, c.x, c.y);
         }
       }
-
-      gesture.current = null;
+      gst.current = null;
 
     } else if (pts.length === 1) {
-      // One finger remains — switch back to drag from current token position
-      const [remaining] = Array.from(pointers.current.entries());
-      const [, pt] = remaining;
-      startDrag(pt.x, pt.y);
-      // Update drag baseline to current token position (already moved by transform)
-      if (gesture.current) {
-        gesture.current.startTokenX = x;
-        gesture.current.startTokenY = y;
-      }
+      // one finger remains: re-baseline drag from CURRENT token position
+      const [pt] = pts;
+      const p = propsRef.current;
+      gst.current = {
+        mode: 'drag',
+        startClientX: pt.x,
+        startClientY: pt.y,
+        startTokenX: p.x,
+        startTokenY: p.y,
+        initDist: 0, initAngle: 0,
+        initScale: p.scale, initRotation: p.rotation,
+        downTime: g?.downTime ?? Date.now(),
+        downClientX: g?.downClientX ?? pt.x,
+        downClientY: g?.downClientY ?? pt.y,
+      };
     } else {
-      // Still 2+ fingers — re-baseline transform
-      startTransform(pts);
+      // still 2+ fingers: re-baseline transform
+      baselineTransform(pts);
     }
-  }, [id, isSelected, onSelect, onRelease, x, y, scale, rotation]);
+  };
 
-  // Mouse fallback (desktop)
-  const handleMouseDown = (e: ReactMouseEvent) => {
+  // Mouse fallback for desktop
+  const onMouseDown = (e: ReactMouseEvent) => {
     if ((e.target as HTMLElement).tagName === 'INPUT' ||
         (e.target as HTMLElement).tagName === 'TEXTAREA') return;
     if (e.button !== 0) return;
 
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const startTX = x;
-    const startTY = y;
-    const downTime = Date.now();
+    const startX  = e.clientX;
+    const startY  = e.clientY;
+    const startTX = propsRef.current.x;
+    const startTY = propsRef.current.y;
+    const t0      = Date.now();
 
-    const onMove_ = (mv: MouseEvent) => {
-      const parentBase = toParentCoords(startX, startY);
-      const parentNew  = toParentCoords(mv.clientX, mv.clientY);
-      onMove(id, startTX + (parentNew.x - parentBase.x), startTY + (parentNew.y - parentBase.y));
+    const mv = (ev: MouseEvent) => {
+      const sc = toCanvas(startX, startY);
+      const nc = toCanvas(ev.clientX, ev.clientY);
+      cbRef.current.onMove(propsRef.current.id, startTX + (nc.x - sc.x), startTY + (nc.y - sc.y));
     };
-
-    const onUp_ = (up: MouseEvent) => {
-      document.removeEventListener('mousemove', onMove_);
-      document.removeEventListener('mouseup', onUp_);
-
-      const dist = Math.hypot(up.clientX - startX, up.clientY - startY);
-      const dur  = Date.now() - downTime;
-
-      if (dist < 5 && dur < 250) {
-        onSelect(isSelected ? null : id);
+    const up = (ev: MouseEvent) => {
+      document.removeEventListener('mousemove', mv);
+      document.removeEventListener('mouseup', up);
+      const d   = Math.hypot(ev.clientX - startX, ev.clientY - startY);
+      const dur = Date.now() - t0;
+      const tid = propsRef.current.id;
+      if (d < 5 && dur < 250) {
+        cbRef.current.onSelect(propsRef.current.isSelected ? null : tid);
       } else {
-        const coords = toParentCoords(up.clientX, up.clientY);
-        onRelease(id, coords.x, coords.y);
+        const c = toCanvas(ev.clientX, ev.clientY);
+        cbRef.current.onRelease(tid, c.x, c.y);
       }
     };
-
-    document.addEventListener('mousemove', onMove_);
-    document.addEventListener('mouseup', onUp_);
+    document.addEventListener('mousemove', mv);
+    document.addEventListener('mouseup', up);
   };
 
-  // Normal / Selected token layout
   const diameter = isSelected ? 112 : 96;
 
   return (
     <div
-      ref={ref}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
-      onMouseDown={handleMouseDown}
+      ref={divRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onMouseDown={onMouseDown}
       onMouseEnter={() => { if (!isDimmed) setIsHovered(true); }}
       onMouseLeave={() => setIsHovered(false)}
       className="select-none touch-none token-container"
@@ -343,104 +343,83 @@ export function Token({
         })`,
         cursor: isDimmed ? 'pointer' : isActive ? 'grabbing' : 'grab',
         transition: isActive
-          ? 'box-shadow 0.15s ease-out, opacity 0.3s ease-out'
+          ? 'filter 0.15s ease-out, opacity 0.3s ease-out'
           : 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-out',
         zIndex: isActive ? 1000 : isSelected ? 900 : isHovered ? 100 : 10,
         opacity: isDimmed ? 0.2 : 1,
-        // Active-touch lift shadow on the container
         filter: isActive
           ? 'drop-shadow(0 8px 24px rgba(0,0,0,0.22)) drop-shadow(0 2px 6px rgba(0,0,0,0.14))'
-          : isHovered && !isDimmed
+          : (isHovered && !isDimmed)
             ? 'drop-shadow(0 4px 12px rgba(0,0,0,0.12))'
             : 'none',
         willChange: isActive ? 'transform' : 'auto',
       }}
     >
-      {/* Expanding ripples under token on spawn */}
       {justCreated && (
         <>
           <div
             className="rounded-full border border-zinc-500 pointer-events-none animate-token-ripple-1"
-            style={{
-              position: 'absolute',
-              left: '50%',
-              top: '50%',
-              transform: 'translate(-50%, -50%)',
-              zIndex: -1,
-            }}
+            style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: -1 }}
           />
           <div
             className="rounded-full border border-zinc-500 pointer-events-none animate-token-ripple-2"
-            style={{
-              position: 'absolute',
-              left: '50%',
-              top: '50%',
-              transform: 'translate(-50%, -50%)',
-              zIndex: -1,
-            }}
+            style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: -1 }}
           />
         </>
       )}
 
-      {/* Inner wrapper for entry scale animation */}
       <div className={justCreated ? "animate-token-spawn" : ""} style={{ transformOrigin: 'center' }}>
+        <div
+          className={`rounded-full flex flex-col items-center justify-center text-center p-2 border-2 ${
+            isYellowSuggested
+              ? 'bg-zinc-50 border-dashed border-zinc-600'
+              : isSelected
+                ? 'bg-zinc-300 border-zinc-950 text-zinc-950 font-black'
+                : isConnected
+                  ? 'bg-zinc-100 border-zinc-700'
+                  : 'bg-white border-zinc-400 hover:border-zinc-600'
+          }`}
+          style={{
+            width: `${diameter}px`,
+            height: `${diameter}px`,
+            position: 'relative',
+            boxShadow: isActive
+              ? 'inset 0 0 0 2px rgba(0,0,0,0.08), 0 0 0 3px rgba(9,9,11,0.06)'
+              : undefined,
+            transition: 'box-shadow 0.15s ease-out',
+          }}
+        >
+          {status === "needs_classification" && (
+            <span className="absolute top-1 right-2 text-amber-500 text-xs" title="Classificatie mislukt">⚠️</span>
+          )}
 
-      {/* Central Circle Orb */}
-      <div
-        className={`rounded-full flex flex-col items-center justify-center text-center p-2 border-2 ${
-          isYellowSuggested
-            ? 'bg-zinc-50 border-dashed border-zinc-600'
-            : isSelected
-              ? 'bg-zinc-300 border-zinc-950 text-zinc-950 font-black'
-              : isConnected
-                ? 'bg-zinc-100 border-zinc-700'
-                : 'bg-white border-zinc-400 hover:border-zinc-600'
-        }`}
-        style={{
-          width: `${diameter}px`,
-          height: `${diameter}px`,
-          position: 'relative',
-          // Subtle inner ring when actively touched
-          boxShadow: isActive
-            ? 'inset 0 0 0 2px rgba(0,0,0,0.08), 0 0 0 3px rgba(9,9,11,0.06)'
-            : undefined,
-          transition: 'box-shadow 0.15s ease-out',
-        }}
-      >
-        {status === "needs_classification" && (
-          <span className="absolute top-1 right-2 text-amber-500 text-xs" title="Classificatie mislukt">⚠️</span>
-        )}
-
-        {status === "pending_classification" ? (
-          <div className="flex flex-col items-center justify-center gap-1.5">
-            <svg className="animate-spin h-5 w-5 text-zinc-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <span className="text-[8px] font-medium text-zinc-500 uppercase tracking-widest animate-pulse">
-              Analyseren
-            </span>
-          </div>
-        ) : (
-          <>
-            {drawingDataUrl && showDrawingThumbnail && (
-              <img
-                src={drawingDataUrl}
-                alt=""
-                className="w-14 h-10 object-contain mb-1 pointer-events-none"
-                draggable={false}
-              />
-            )}
-            <span className="text-[10px] font-bold leading-tight select-none tracking-wide text-zinc-950 line-clamp-3">
-              {label}
-            </span>
-          </>
-        )}
+          {status === "pending_classification" ? (
+            <div className="flex flex-col items-center justify-center gap-1.5">
+              <svg className="animate-spin h-5 w-5 text-zinc-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span className="text-[8px] font-medium text-zinc-500 uppercase tracking-widest animate-pulse">
+                Analyseren
+              </span>
+            </div>
+          ) : (
+            <>
+              {drawingDataUrl && showDrawingThumbnail && (
+                <img
+                  src={drawingDataUrl}
+                  alt=""
+                  className="w-14 h-10 object-contain mb-1 pointer-events-none"
+                  draggable={false}
+                />
+              )}
+              <span className="text-[10px] font-bold leading-tight select-none tracking-wide text-zinc-950 line-clamp-3">
+                {label}
+              </span>
+            </>
+          )}
+        </div>
       </div>
-
-
-      </div>
-
     </div>
   );
 }
