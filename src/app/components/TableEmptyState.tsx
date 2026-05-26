@@ -39,7 +39,7 @@ export function TableEmptyState() {
       }
 
       // Bounds with 12px padding
-      const padding = 12;
+      const padding = 0;
       const minX = padding;
       const minY = padding;
       const maxX = parentRect.width - textRect.width - padding;
@@ -84,31 +84,7 @@ export function TableEmptyState() {
   return (
     <div ref={containerRef} className="absolute inset-0 z-10 pointer-events-none select-none overflow-hidden bg-zinc-50/40">
 
-      {/* Multi-sided orientation markings */}
-      
-      {/* Top Edge (Noord - Rotated 180deg) */}
-      <div className="absolute top-6 left-1/2 -translate-x-1/2 rotate-180 flex flex-col items-center gap-1 opacity-20">
-        <span className="text-[9px] font-black tracking-widest text-zinc-550 uppercase">TAFEL · NOORD</span>
-        <div className="w-8 h-px bg-zinc-400" />
-      </div>
 
-      {/* Bottom Edge (Zuid - Normal) */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 opacity-20">
-        <div className="w-8 h-px bg-zinc-400" />
-        <span className="text-[9px] font-black tracking-widest text-zinc-550 uppercase">TAFEL · ZUID</span>
-      </div>
-
-      {/* Left Edge (West - Rotated 90deg CW) */}
-      <div className="absolute left-6 top-1/2 -translate-y-1/2 rotate-90 flex flex-col items-center gap-1 opacity-20">
-        <span className="text-[9px] font-black tracking-widest text-zinc-550 uppercase">TAFEL · WEST</span>
-        <div className="w-8 h-px bg-zinc-400" />
-      </div>
-
-      {/* Right Edge (Oost - Rotated 270deg CW) */}
-      <div className="absolute right-6 top-1/2 -translate-y-1/2 -rotate-90 flex flex-col items-center gap-1 opacity-20">
-        <span className="text-[9px] font-black tracking-widest text-zinc-550 uppercase">TAFEL · OOST</span>
-        <div className="w-8 h-px bg-zinc-400" />
-      </div>
 
       {/* Subtle corner ticks */}
       <div className="absolute top-8 left-8 w-6 h-6 border-t border-l border-zinc-200 dark:border-zinc-800/40 opacity-40" />
