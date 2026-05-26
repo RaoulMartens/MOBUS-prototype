@@ -38,8 +38,8 @@ export function TableEmptyState() {
         initialized = true;
       }
 
-      // Bounds with 32px padding
-      const padding = 32;
+      // Bounds with 12px padding
+      const padding = 12;
       const minX = padding;
       const minY = padding;
       const maxX = parentRect.width - textRect.width - padding;
