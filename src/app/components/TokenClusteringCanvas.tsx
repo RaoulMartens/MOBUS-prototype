@@ -458,7 +458,7 @@ export function TokenClusteringCanvas() {
         id: dbToken.id,
         x: existing?.x ?? (dbToken.position.x || (300 + Math.random() * 400)),
         y: existing?.y ?? (dbToken.position.y ? Math.max(dbToken.position.y, TOP_RESTRICTED_AREA + 50) : defaultY),
-        label: dbToken.ai_metadata?.title || dbToken.text,
+        label: dbToken.text,
         description: dbToken.description || '',
         drawingDataUrl: dbToken.drawingDataUrl || null,
         rotation: existing?.rotation ?? dbToken.rotation ?? 0,
@@ -1159,49 +1159,6 @@ export function TokenClusteringCanvas() {
               </div>
             );
           }
-        })}
-
-        {/* Midpoint interactive relation nodes and detail cards */}
-        {connections.map(({ from, to }) => {
-          const token1 = canvasTokens.find((t) => t.id === from);
-          const token2 = canvasTokens.find((t) => t.id === to);
-          if (!token1 || !token2) return null;
-
-          const midX = (token1.x + token2.x) / 2;
-          const midY = (token1.y + token2.y) / 2;
-          const key = getRelationKey(from, to);
-          const isSelected = selectedRelationKey === key;
-
-          if (isSelected) {
-            return (
-              <div
-                key={`relation-card-${key}`}
-                className="absolute bg-white border border-zinc-950 rounded px-4 py-3 shadow-none z-50 animate-fade-in w-60 text-center"
-                style={{
-                  left: `${midX}px`,
-                  top: `${midY}px`,
-                  transform: 'translate(-50%, -50%)',
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Verband</p>
-                <p className="text-xs text-zinc-950 leading-normal font-medium mb-2">
-                  {generateRelationLabel(token1.label, token2.label)}
-                </p>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedRelationKey(null);
-                  }}
-                  className="text-[9px] text-zinc-950 hover:underline font-bold uppercase tracking-wider mt-1 cursor-pointer"
-                >
-                  Sluiten
-                </button>
-              </div>
-            );
-          }
-
-          return null;
         })}
 
         {/* Dynamic cluster circles */}
