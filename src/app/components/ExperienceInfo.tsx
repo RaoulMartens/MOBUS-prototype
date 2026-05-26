@@ -6,10 +6,9 @@ import {
   Sprout,
   GitFork,
   Sparkles,
-  Smartphone,
+  QrCode,
   Shield,
-  UserCheck,
-  Zap
+  UserCheck
 } from 'lucide-react';
 import { useTokens } from '../contexts/TokenContext';
 
@@ -73,15 +72,15 @@ export function ExperienceInfo() {
             Ontdek nieuwe inzichten, leg verbanden en bouw samen aan een levend netwerk van ideeën.
           </p>
 
-          {/* NFC / Phone Visual Prompt */}
+          {/* QR Code Visual Prompt */}
           <div className="flex flex-col items-center gap-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800/60 rounded px-6 py-6 w-full max-w-md mb-10">
             <div className="relative flex items-center justify-center w-12 h-12">
               <div className="absolute inset-0 rounded-full bg-zinc-950/5 dark:bg-zinc-50/5 animate-ping opacity-75" />
               <div className="absolute inset-2 rounded-full bg-zinc-950/10 dark:bg-zinc-50/10 animate-pulse" />
-              <Smartphone className="w-6 h-6 text-zinc-950 dark:text-zinc-50 relative z-10" />
+              <QrCode className="w-6 h-6 text-zinc-950 dark:text-zinc-50 relative z-10" />
             </div>
             <p className="text-xs md:text-sm font-semibold tracking-wide text-zinc-950 dark:text-zinc-50">
-              Houd je telefoon tegen de tafel om te beginnen
+              Scan de QR-code om te verbinden
             </p>
           </div>
 
@@ -153,8 +152,8 @@ export function ExperienceInfo() {
           </span>
           <span className="w-1.5 h-1.5 bg-zinc-300 dark:bg-zinc-800 rounded-full" />
           <span className="flex items-center gap-1">
-            <Zap size={12} className="opacity-70" />
-            NFC onthoudt je sessie
+            <QrCode size={12} className="opacity-70" />
+            Koppel via QR-code
           </span>
         </div>
       </footer>
