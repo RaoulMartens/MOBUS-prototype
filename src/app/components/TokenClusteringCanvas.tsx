@@ -131,7 +131,7 @@ function normalizeWords(text: string): string[] {
     .replace(/[^a-z0-9\s-]/g, ' ')
     .split(/\s+/)
     .map(word => word.trim())
-    .filter(word => word.length >= 3 && !STOP_WORDS.has(word));
+    .filter(word => word.length >= 2 && !STOP_WORDS.has(word));
 }
 
 function calculateSemanticScore(textA: string, descA: string, textB: string, descB: string): number {
@@ -472,12 +472,12 @@ export function TokenClusteringCanvas() {
 
   // Seed demo ideas automatically for "demo" session ID
   useEffect(() => {
-    if (!loading && dbTokens.length === 0 && (sessionId === 'demo' || sessionId === 'demo-session')) {
+    if (!loading && dbTokens.length === 0 && sessionId.startsWith('demo')) {
       console.log('[TokenClusteringCanvas] Seeding demo ideas...');
       const demoIdeas = [
-        { text: 'Idee A: Mensgerichte Robotica', desc: 'Robots inzetten om repetitieve taken in het team te automatiseren.', x: 350, y: 300 },
-        { text: 'Idee B: Co-creatie Hubs', desc: 'Fysieke ruimtes waar burgers en ontwerpers samen prototypes testen.', x: 450, y: 380 },
-        { text: 'Idee C: Ethische AI Checklist', desc: 'Een transparante methodiek om privacy en bias te controleren.', x: 550, y: 280 }
+        { text: 'Robotica & AI Systemen', desc: 'Robots en AI technologie inzetten voor het team.', x: 350, y: 300 },
+        { text: 'Co-creatie Hubs', desc: 'Fysieke ruimte waar burgers en ontwerpers samen prototypes testen.', x: 450, y: 380 },
+        { text: 'AI Ethiek & Systeem', desc: 'Transparante controle op data, privacy en AI systemen.', x: 550, y: 280 }
       ];
       // Seed tokens with a slight staggered delay to make spawn animations play beautifully
       demoIdeas.forEach((idea, index) => {
