@@ -19,24 +19,7 @@ const getNetworkPhoneUrl = (sessionId: string): string => {
   return `${window.location.origin}/phone?sessionId=${sessionId}`;
 };
 
-// ── Suggestion templates per cluster size ──
-const SUGGESTIONS_2 = [
-  'Deze twee ideeën lijken op elkaar. Wat is de kern?',
-  'Overweeg deze ideeën samen te voegen tot één concept.',
-  'Welke overlap zie je tussen deze twee?',
-];
-const SUGGESTIONS_3PLUS = [
-  'Misschien vormen deze ideeën samen één werkwijze.',
-  'Welk overkoepelend thema verbindt deze groep?',
-  'Probeer deze groep een naam te geven.',
-  'Kun je hier een prioriteit uit kiezen?',
-];
-
-function pickSuggestion(templates: string[], seed: number): string {
-  return templates[seed % templates.length];
-}
-
-// ── Auto-generate a cluster label from idea texts ──
+// ── Local semantic helpers ────────────────────────────────────────────────────
 const STOP_WORDS = new Set([
   'aan', 'als', 'bij', 'dat', 'de', 'deze', 'die', 'dit', 'door', 'een', 'en',
   'er', 'het', 'hier', 'hoe', 'in', 'is', 'kan', 'met', 'naar', 'niet', 'nog',
@@ -45,397 +28,284 @@ const STOP_WORDS = new Set([
 ]);
 
 const THEME_RULES = [
-  {
-    label: 'Mensgerichte Technologie',
-    keywords: ['ai', 'robot', 'technologie', 'tech', 'digitaal', 'systeem', 'data', 'automatisering', 'mens', 'team'],
-  },
-  {
-    label: 'Veilige en Eerlijke Keuzes',
-    keywords: ['ethiek', 'veilig', 'risico', 'privacy', 'vertrouwen', 'eerlijk', 'transparant', 'controle'],
-  },
-  {
-    label: 'Samenwerking en Eigenaarschap',
-    keywords: ['samen', 'team', 'groep', 'community', 'deelname', 'participatie', 'co-creatie', 'eigenaarschap'],
-  },
-  {
-    label: 'Duurzame Impact',
-    keywords: ['duurzaam', 'milieu', 'impact', 'circulair', 'energie', 'klimaat', 'toekomst', 'sociaal'],
-  },
-  {
-    label: 'Leren en Experimenteren',
-    keywords: ['leren', 'onderwijs', 'training', 'experiment', 'prototype', 'testen', 'feedback', 'onderzoek'],
-  },
-  {
-    label: 'Toegankelijke Ervaring',
-    keywords: ['toegankelijk', 'ervaring', 'gebruiker', 'gebruikers', 'interface', 'simpel', 'duidelijk', 'inclusief'],
-  },
+  { label: 'Mensgerichte Technologie', keywords: ['ai', 'robot', 'technologie', 'tech', 'digitaal', 'systeem', 'data', 'automatisering', 'mens', 'team'] },
+  { label: 'Veilige en Eerlijke Keuzes', keywords: ['ethiek', 'veilig', 'risico', 'privacy', 'vertrouwen', 'eerlijk', 'transparant', 'controle'] },
+  { label: 'Samenwerking en Eigenaarschap', keywords: ['samen', 'team', 'groep', 'community', 'deelname', 'participatie', 'co-creatie', 'eigenaarschap'] },
+  { label: 'Duurzame Impact', keywords: ['duurzaam', 'milieu', 'impact', 'circulair', 'energie', 'klimaat', 'toekomst', 'sociaal'] },
+  { label: 'Leren en Experimenteren', keywords: ['leren', 'onderwijs', 'training', 'experiment', 'prototype', 'testen', 'feedback', 'onderzoek'] },
+  { label: 'Toegankelijke Ervaring', keywords: ['toegankelijk', 'ervaring', 'gebruiker', 'gebruikers', 'interface', 'simpel', 'duidelijk', 'inclusief'] },
 ];
 
 function normalizeWords(text: string): string[] {
-  return text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s-]/g, ' ')
-    .split(/\s+/)
-    .map(word => word.trim())
-    .filter(word => word.length >= 3 && !STOP_WORDS.has(word));
+  return text.toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/).map(w => w.trim()).filter(w => w.length >= 3 && !STOP_WORDS.has(w));
 }
 
-function toTitleCase(word: string): string {
-  return word.charAt(0).toUpperCase() + word.slice(1);
+function detectTheme(texts: string[]): string | null {
+  const words = normalizeWords(texts.join(' '));
+  const best = THEME_RULES.map(r => ({
+    label: r.label,
+    score: r.keywords.reduce((s, k) => s + words.filter(w => w.includes(k) || k.includes(w)).length, 0),
+  })).sort((a, b) => b.score - a.score)[0];
+  return (best && best.score >= 2) ? best.label : null;
 }
 
-function generateClusterLabel(items: Array<{ text: string; description?: string }>, index: number): string {
-  const combinedText = items
-    .map(item => `${item.text} ${item.description || ''}`)
-    .join(' ');
-  const words = normalizeWords(combinedText);
-
-  const bestTheme = THEME_RULES
-    .map(theme => ({
-      label: theme.label,
-      score: theme.keywords.reduce((score, keyword) => (
-        score + words.filter(word => word.includes(keyword) || keyword.includes(word)).length
-      ), 0),
-    }))
-    .sort((a, b) => b.score - a.score)[0];
-
-  if (bestTheme && bestTheme.score >= 2) {
-    return bestTheme.label;
-  }
-
-  const counts = new Map<string, number>();
-  words.forEach(word => counts.set(word, (counts.get(word) || 0) + 1));
-
-  const keywords = Array.from(counts.entries())
-    .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
-    .slice(0, 2)
-    .map(([word]) => toTitleCase(word));
-
-  if (keywords.length >= 2) {
-    return `${keywords[0]} & ${keywords[1]}`;
-  }
-
-  if (keywords.length === 1) {
-    return `${keywords[0]} als Kernidee`;
-  }
-
-  return `Thema ${index + 1}`;
+function detectTension(texts: string[]): boolean {
+  const combined = texts.join(' ').toLowerCase();
+  const isTech = combined.includes('ai') || combined.includes('robot') || combined.includes('technologie') || combined.includes('digitaal') || combined.includes('systeem');
+  const isHuman = combined.includes('mens') || combined.includes('ethiek') || combined.includes('sociaal') || combined.includes('gevoel') || combined.includes('samen') || combined.includes('veilig');
+  return isTech && isHuman;
 }
 
-interface Explanation {
-  reasons: string[];
-  question: string;
+// ── Wall state types ──────────────────────────────────────────────────────────
+type WallStateType = 'standby' | 'emerging' | 'user_group' | 'ai_suggestion' | 'tension' | 'naming';
+
+interface WallState {
+  type: WallStateType;
+  label?: string;     // theme label
+  ideaA?: string;     // for tension/suggestion
+  ideaB?: string;
+  count?: number;     // group size
 }
 
-function generateRelationExplanation(tokenA: { text: string; description?: string }, tokenB: { text: string; description?: string }): Explanation {
+// ── Relation explanation (kept for activeRelation view) ─────────────────────
+function generateRelationExplanation(
+  tokenA: { text: string; description?: string },
+  tokenB: { text: string; description?: string }
+): { reasons: string[]; question: string } {
   const wordsA = normalizeWords(`${tokenA.text} ${tokenA.description || ''}`);
   const wordsB = normalizeWords(`${tokenB.text} ${tokenB.description || ''}`);
-  
   const setA = new Set(wordsA);
-  const setB = new Set(wordsB);
-  
-  // Find shared keywords
   const sharedKeywords: string[] = [];
-  setA.forEach(w => {
-    if (setB.has(w) && w.length > 3) {
-      sharedKeywords.push(w);
-    }
-  });
+  setA.forEach(w => { if (new Set(wordsB).has(w) && w.length > 3) sharedKeywords.push(w); });
 
-  // Find matching themes for both
   const matchedThemes: string[] = [];
   THEME_RULES.forEach(theme => {
-    const hasA = theme.keywords.some(kw => 
-      wordsA.some(w => w.includes(kw) || kw.includes(w))
-    );
-    const hasB = theme.keywords.some(kw => 
-      wordsB.some(w => w.includes(kw) || kw.includes(w))
-    );
-    if (hasA && hasB) {
-      matchedThemes.push(theme.label);
-    }
+    const hasA = theme.keywords.some(kw => wordsA.some(w => w.includes(kw) || kw.includes(w)));
+    const hasB = theme.keywords.some(kw => wordsB.some(w => w.includes(kw) || kw.includes(w)));
+    if (hasA && hasB) matchedThemes.push(theme.label);
   });
 
   const reasons: string[] = [];
+  if (matchedThemes.length > 0) reasons.push(`ze allebei aansluiten bij het thema **${matchedThemes[0]}**`);
+  else if (sharedKeywords.length > 0) reasons.push(`ze beide praten over onderwerpen rondom **"${sharedKeywords.slice(0, 2).join(' & ')}"**`);
+  else reasons.push(`ze een gemeenschappelijke ondergrond lijken te hebben in jullie sessie`);
+  reasons.push(`ze elkaar aanvullen in hoe ze de sessie vormgeven`);
 
-  // Theme-based reasons
-  if (matchedThemes.length > 0) {
-    reasons.push(`ze allebei aansluiten bij het thema **${matchedThemes[0]}**`);
-  } else if (sharedKeywords.length > 0) {
-    reasons.push(`ze beide praten over onderwerpen rondom **"${sharedKeywords.slice(0, 2).map(toTitleCase).join(' & ')}"**`);
-  } else {
-    reasons.push(`ze een gemeenschappelijke ondergrond lijken te hebben in jullie sessie`);
-  }
+  const question = matchedThemes.includes('Mensgerichte Technologie')
+    ? `Hoe kunnen de technologie in "${tokenA.text}" en de menselijke maat in "${tokenB.text}" elkaar versterken?`
+    : `Wat gebeurt er als je "${tokenA.text}" combineert met "${tokenB.text}"?`;
 
-  // Phase/Implementation reason
-  const cleanA = tokenA.text.toLowerCase() + ' ' + (tokenA.description || '').toLowerCase();
-  const cleanB = tokenB.text.toLowerCase() + ' ' + (tokenB.description || '').toLowerCase();
-
-  const isTechA = cleanA.includes('ai') || cleanA.includes('robot') || cleanA.includes('techno') || cleanA.includes('systeem') || cleanA.includes('digitaal') || cleanA.includes('data') || cleanA.includes('computer');
-  const isTechB = cleanB.includes('ai') || cleanB.includes('robot') || cleanB.includes('techno') || cleanB.includes('systeem') || cleanB.includes('digitaal') || cleanB.includes('data') || cleanB.includes('computer');
-
-  const isHumanA = cleanA.includes('mens') || cleanA.includes('team') || cleanA.includes('crea') || cleanA.includes('burger') || cleanA.includes('samen') || cleanA.includes('sociaal') || cleanA.includes('gevoel') || cleanA.includes('ethiek');
-  const isHumanB = cleanB.includes('mens') || cleanB.includes('team') || cleanB.includes('crea') || cleanB.includes('burger') || cleanB.includes('samen') || cleanB.includes('sociaal') || cleanB.includes('gevoel') || cleanB.includes('ethiek');
-
-  if ((isTechA && isHumanB) || (isTechB && isHumanA)) {
-    reasons.push(`het ene idee de technische mogelijkheden verkent, terwijl het andere juist de menselijke of sociale factor centraal stelt`);
-  } else if (cleanA.includes('praktisch') || cleanA.includes('doen') || cleanB.includes('praktisch') || cleanB.includes('doen') || cleanA.includes('concrete') || cleanB.includes('concrete')) {
-    reasons.push(`ze een interessante spanning laten zien tussen een concrete, praktische aanpak en een meer conceptueel idee`);
-  } else {
-    reasons.push(`ze elkaar aanvullen in hoe ze de sessie vormgeven`);
-  }
-
-  // 3rd reason: creative facilitator nudge
-  if (matchedThemes.length > 1) {
-    reasons.push(`ze ook raken aan aspecten van **${matchedThemes[1]}**`);
-  } else {
-    reasons.push(`ze samen een bredere oplossingsrichting lijken te openen`);
-  }
-
-  // Creative question
-  let question = `Wat gebeurt er als je "${tokenA.text}" combineert met "${tokenB.text}"?`;
-  if (matchedThemes.includes('Mensgerichte Technologie')) {
-    question = `Hoe kunnen de technologie in "${tokenA.text}" en de menselijke maat in "${tokenB.text}" elkaar versterken?`;
-  } else if (matchedThemes.includes('Veilige en Eerlijke Keuzes')) {
-    question = `Welke morele of ethische grens moeten we bewaken als we "${tokenA.text}" en "${tokenB.text}" samenbrengen?`;
-  } else if (matchedThemes.includes('Samenwerking en Eigenaarschap')) {
-    question = `Wie zou de kartrekker moeten zijn als we "${tokenA.text}" en "${tokenB.text}" als één geheel oppakken?`;
-  } else if (matchedThemes.includes('Duurzame Impact')) {
-    question = `Wat voor positieve impact op de lange termijn ontstaat er als we "${tokenA.text}" koppelen aan "${tokenB.text}"?`;
-  } else if ((isTechA && isHumanB) || (isTechB && isHumanA)) {
-    question = `Hoe zorgt de menselijke factor ervoor dat het technische systeem van deze ideeën betrouwbaar en prettig blijft?`;
-  }
-
-  return { reasons: reasons.slice(0, 3), question };
+  return { reasons: reasons.slice(0, 2), question };
 }
 
 function renderReason(reason: string) {
   const parts = reason.split(/\*\*(.*?)\*\*/g);
-  return parts.map((part, i) => 
+  return parts.map((part, i) =>
     i % 2 === 1 ? <strong key={i} style={{ fontWeight: 700, color: '#09090b' }}>{part}</strong> : part
   );
 }
 
-interface ClusterCardIdea {
-  text: string;
-  drawingDataUrl: string | null;
-}
-
-interface ClusterCard {
-  label: string;
-  ideas: ClusterCardIdea[];
-  suggestion: string | null;
-}
-
+// ── Component ─────────────────────────────────────────────────────────────────
 export function SystemInsights() {
   const { tokens, loading, sessionId, activeRelation } = useTokens();
   const [isThinking, setIsThinking] = useState(false);
   const prevTokensSignature = useRef('');
-  const [insight, setInsight] = useState<{
-    state: 'standby' | 'suggestion' | 'reflection' | 'summary';
-    title: string;
-    message: string;
-    themeLabel?: string;
-    relatedIdeaIds: string[];
-    confidence: number;
+  const [firestoreInsight, setFirestoreInsight] = useState<{
+    state: string; title: string; message: string; themeLabel?: string; relatedIdeaIds: string[]; confidence: number;
   } | null>(null);
 
+  // Live insight from Firestore (AI backend writes this)
   useEffect(() => {
     if (!sessionId) return;
-    const insightRef = doc(db, "sessions", sessionId, "state", "insight");
-    const unsubscribe = onSnapshot(insightRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setInsight(snapshot.data() as any);
-      } else {
-        setInsight(null);
-      }
-    }, (err) => {
-      console.error("Error loading live insight:", err);
+    const insightRef = doc(db, 'sessions', sessionId, 'state', 'insight');
+    const unsub = onSnapshot(insightRef, snap => {
+      setFirestoreInsight(snap.exists() ? (snap.data() as any) : null);
     });
-    return () => unsubscribe();
+    return () => unsub();
   }, [sessionId]);
 
-  const clusterableTokens = useMemo(() => {
-    return tokens;
-  }, [tokens]);
+  useEffect(() => { document.title = 'MOBUS - Wandscherm'; }, []);
 
+  // Thinking pulse on token movement
   useEffect(() => {
-    document.title = "MOBUS - Wandscherm";
-  }, []);
-
-  useEffect(() => {
-    const signature = JSON.stringify(tokens.map(t => ({ id: t.id, x: t.position.x, y: t.position.y, clusterId: t.clusterId })));
-    if (prevTokensSignature.current && signature !== prevTokensSignature.current) {
+    const sig = JSON.stringify(tokens.map(t => ({ id: t.id, x: t.position.x, y: t.position.y })));
+    if (prevTokensSignature.current && sig !== prevTokensSignature.current) {
       setIsThinking(true);
-      const timer = setTimeout(() => setIsThinking(false), 3500);
-      return () => clearTimeout(timer);
+      const t = setTimeout(() => setIsThinking(false), 2500);
+      return () => clearTimeout(t);
     }
-    prevTokensSignature.current = signature;
+    prevTokensSignature.current = sig;
   }, [tokens]);
 
-  // Periodic passive check-in
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setIsThinking(true);
-      setTimeout(() => setIsThinking(false), 2500);
-    }, 15000);
-    return () => clearInterval(interval);
-  }, []);
+  // ── Derive wall state from token positions ─────────────────────────────────
+  const wallState = useMemo<WallState>(() => {
+    if (tokens.length === 0) return { type: 'standby' };
 
-  const clusterCards = useMemo<ClusterCard[]>(() => {
-    if (clusterableTokens.length === 0) return [];
-
-    // ── Proximity clustering (same logic as before) ──
-    const SNAP_DISTANCE = 140;
+    const SNAP = 140;
     const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
-      Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+      Math.hypot(b.x - a.x, b.y - a.y);
 
+    // Find connected components
     const adj: Record<string, string[]> = {};
-    clusterableTokens.forEach(t => { adj[t.id] = []; });
-
-    for (let i = 0; i < clusterableTokens.length; i++) {
-      for (let j = i + 1; j < clusterableTokens.length; j++) {
-        if (dist(clusterableTokens[i].position, clusterableTokens[j].position) < SNAP_DISTANCE) {
-          adj[clusterableTokens[i].id].push(clusterableTokens[j].id);
-          adj[clusterableTokens[j].id].push(clusterableTokens[i].id);
+    tokens.forEach(t => { adj[t.id] = []; });
+    for (let i = 0; i < tokens.length; i++) {
+      for (let j = i + 1; j < tokens.length; j++) {
+        if (dist(tokens[i].position, tokens[j].position) < SNAP) {
+          adj[tokens[i].id].push(tokens[j].id);
+          adj[tokens[j].id].push(tokens[i].id);
         }
       }
     }
 
-    // BFS connected components
     const visited = new Set<string>();
     const components: typeof tokens[] = [];
-
-    clusterableTokens.forEach(t => {
+    tokens.forEach(t => {
       if (visited.has(t.id)) return;
       const comp: typeof tokens = [];
-      const queue = [t.id];
+      const q = [t.id];
       visited.add(t.id);
-      while (queue.length > 0) {
-        const cid = queue.shift()!;
-        const tk = clusterableTokens.find(x => x.id === cid);
+      while (q.length) {
+        const cid = q.shift()!;
+        const tk = tokens.find(x => x.id === cid);
         if (tk) comp.push(tk);
-        adj[cid].forEach(nid => {
-          if (!visited.has(nid)) { visited.add(nid); queue.push(nid); }
-        });
+        adj[cid].forEach(nid => { if (!visited.has(nid)) { visited.add(nid); q.push(nid); } });
       }
       if (comp.length >= 2) components.push(comp);
     });
 
-    // Build cards
-    return components.map((comp, idx) => {
-      const ideas = comp.map(t => ({
-        text: t.text,
-        drawingDataUrl: t.drawingDataUrl || null,
-      }));
-      
-      let label = "";
-      const validClusterName = comp.find(t => t.ai_metadata?.cluster_name && t.ai_metadata.cluster_name !== "null" && t.ai_metadata.cluster_name !== "none")?.ai_metadata?.cluster_name;
-      if (validClusterName) {
-        label = validClusterName;
-      } else {
-        label = generateClusterLabel(comp, idx);
+    // Firestore AI suggestion takes priority (but only suggestion/reflection state)
+    if (firestoreInsight && firestoreInsight.state !== 'standby') {
+      // Map AI insight to our wall state
+      if (firestoreInsight.state === 'suggestion') return { type: 'ai_suggestion' };
+      if (firestoreInsight.state === 'reflection') {
+        // Check for tension in any group
+        if (components.length > 0) {
+          const hasTension = components.some(comp => detectTension(comp.map(t => `${t.text} ${t.description || ''}`)));
+          if (hasTension) {
+            const tensionGroup = components.find(comp => detectTension(comp.map(t => `${t.text} ${t.description || ''}`)))!;
+            return { type: 'tension', ideaA: tensionGroup[0].text, ideaB: tensionGroup[tensionGroup.length - 1].text };
+          }
+        }
+        return { type: 'user_group', count: components[0]?.length };
       }
+    }
 
-      const suggestion = comp.length >= 3
-        ? pickSuggestion(SUGGESTIONS_3PLUS, idx)
-        : comp.length >= 2
-          ? pickSuggestion(SUGGESTIONS_2, idx)
-          : null;
+    // Local derivation
+    if (components.length === 0) {
+      // No groups yet — check if tokens are drifting close (proximity)
+      let closestDist = Infinity;
+      for (let i = 0; i < tokens.length; i++) {
+        for (let j = i + 1; j < tokens.length; j++) {
+          const d = dist(tokens[i].position, tokens[j].position);
+          if (d < closestDist) closestDist = d;
+        }
+      }
+      if (tokens.length >= 2 && closestDist < 240) {
+        return { type: 'emerging' };
+      }
+      return { type: 'standby' };
+    }
 
-      return { label, ideas, suggestion };
-    });
-  }, [clusterableTokens]);
+    // We have groups — check for tension first
+    const tensionGroup = components.find(comp => detectTension(comp.map(t => `${t.text} ${t.description || ''}`)));
+    if (tensionGroup) {
+      const techToken = tensionGroup.find(t => {
+        const c = `${t.text} ${t.description || ''}`.toLowerCase();
+        return c.includes('ai') || c.includes('robot') || c.includes('technologie') || c.includes('digitaal');
+      });
+      const humanToken = tensionGroup.find(t => {
+        const c = `${t.text} ${t.description || ''}`.toLowerCase();
+        return c.includes('mens') || c.includes('ethiek') || c.includes('sociaal') || c.includes('gevoel');
+      });
+      return {
+        type: 'tension',
+        ideaA: techToken?.text || tensionGroup[0].text,
+        ideaB: humanToken?.text || tensionGroup[1]?.text,
+      };
+    }
 
+    // Check for nameable group with a detected theme
+    const themeGroup = components.find(comp => detectTheme(comp.map(t => `${t.text} ${t.description || ''}`)) !== null);
+    if (themeGroup) {
+      const theme = detectTheme(themeGroup.map(t => `${t.text} ${t.description || ''}`));
+      return { type: 'naming', label: theme ?? undefined, count: themeGroup.length };
+    }
+
+    // Default: user group reflection
+    return { type: 'user_group', count: components[0].length };
+  }, [tokens, firestoreInsight]);
+
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div style={styles.loadingWrapper}>
-        <span style={styles.loadingText}>Laden...</span>
+      <div style={s.loadingRoot}>
+        <span style={s.loadingText}>Laden…</span>
       </div>
     );
   }
 
+  // ── No ideas yet: full landing with QR ────────────────────────────────────
+  if (tokens.length === 0) {
+    return (
+      <div style={s.landingRoot} className="anim-fade-in">
+        <WallStyles />
+        <div style={s.landingInner}>
+          <div style={s.landingLeft}>
+            <p style={s.landingEyebrow}>MOBUS — Wandscherm</p>
+            <h1 style={s.landingTitle}>Sessie gestart</h1>
+            <p style={s.landingSubtitle}>Verbind je telefoon om je eerste idee toe te voegen aan de tafel.</p>
+          </div>
+          <div style={s.landingDivider} />
+          <div style={s.landingRight}>
+            <div style={s.qrWrap}>
+              <QRCodeSVG value={getNetworkPhoneUrl(sessionId)} size={128} bgColor="#ffffff" fgColor="#09090b" />
+            </div>
+            <span style={s.qrLabel}>Scan met je telefoon</span>
+            <span style={s.sessionCode}>{sessionId.replace(/^mobus-/, '')}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Active relation (user tapped a dashed line on table) ──────────────────
   if (activeRelation) {
     const tokenA = tokens.find(t => t.id === activeRelation.sourceId);
     const tokenB = tokens.find(t => t.id === activeRelation.targetId);
 
     if (tokenA && tokenB) {
-      const explanation = generateRelationExplanation(tokenA, tokenB);
-
+      const { reasons, question } = generateRelationExplanation(tokenA, tokenB);
       return (
-        <div style={styles.activeRelationRoot} className="animate-fade-in">
-          <div style={styles.activeRelationContainer}>
-            <div style={styles.activeRelationCard}>
-              <div style={styles.cardHeaderSmall}>Mogelijke connectie</div>
-              
-              <div style={styles.activeRelationIdeasRow}>
-                <div style={styles.activeRelationIdea}>
-                  {tokenA.drawingDataUrl && (
-                    <img src={tokenA.drawingDataUrl} alt="" style={styles.relationIdeaSketch} />
-                  )}
-                  <div style={styles.relationIdeaTitle}>{tokenA.ai_metadata?.title || tokenA.text}</div>
-                  <div style={styles.relationIdeaDesc}>
-                    {tokenA.ai_metadata?.summary || tokenA.description}
-                  </div>
-                  {tokenA.ai_metadata?.creative_intent && (
-                    <div style={{ fontSize: '0.75rem', fontStyle: 'italic', marginTop: '0.4rem', color: '#71717a' }}>
-                      <strong>Intentie:</strong> {tokenA.ai_metadata.creative_intent}
-                    </div>
-                  )}
-                </div>
-                
-                <div style={styles.plusSign}>+</div>
-                
-                <div style={styles.activeRelationIdea}>
-                  {tokenB.drawingDataUrl && (
-                    <img src={tokenB.drawingDataUrl} alt="" style={styles.relationIdeaSketch} />
-                  )}
-                  <div style={styles.relationIdeaTitle}>{tokenB.ai_metadata?.title || tokenB.text}</div>
-                  <div style={styles.relationIdeaDesc}>
-                    {tokenB.ai_metadata?.summary || tokenB.description}
-                  </div>
-                  {tokenB.ai_metadata?.creative_intent && (
-                    <div style={{ fontSize: '0.75rem', fontStyle: 'italic', marginTop: '0.4rem', color: '#71717a' }}>
-                      <strong>Intentie:</strong> {tokenB.ai_metadata.creative_intent}
-                    </div>
-                  )}
-                </div>
+        <div style={s.relationRoot} className="anim-fade-in">
+          <WallStyles />
+          <div style={s.relationCard}>
+            <p style={s.relationEyebrow}>Mogelijke connectie</p>
+            <div style={s.relationRow}>
+              <div style={s.relationIdea}>
+                {tokenA.drawingDataUrl && <img src={tokenA.drawingDataUrl} alt="" style={s.sketch} />}
+                <div style={s.relationIdeaTitle}>{tokenA.ai_metadata?.title || tokenA.text}</div>
+                <div style={s.relationIdeaDesc}>{tokenA.ai_metadata?.summary || tokenA.description}</div>
               </div>
-
-              <div style={styles.explanationSection}>
-                <div style={styles.explanationIntro}>Deze ideeën sluiten op elkaar aan omdat:</div>
-                <ul style={styles.reasonsList}>
-                  {tokenA.ai_metadata?.possible_connections && tokenA.ai_metadata.possible_connections.length > 0 ? (
-                    tokenA.ai_metadata.possible_connections.map((conn, idx) => (
-                      <li key={idx} style={styles.reasonItem}>
-                        <span style={styles.bullet}>•</span>
-                        <span>{conn}</span>
-                      </li>
-                    ))
-                  ) : tokenB.ai_metadata?.possible_connections && tokenB.ai_metadata.possible_connections.length > 0 ? (
-                    tokenB.ai_metadata.possible_connections.map((conn, idx) => (
-                      <li key={idx} style={styles.reasonItem}>
-                        <span style={styles.bullet}>•</span>
-                        <span>{conn}</span>
-                      </li>
-                    ))
-                  ) : (
-                    explanation.reasons.map((reason, rIdx) => (
-                      <li key={rIdx} style={styles.reasonItem}>
-                        <span style={styles.bullet}>•</span>
-                        <span>{renderReason(reason)}</span>
-                      </li>
-                    ))
-                  )}
-                </ul>
+              <div style={s.plusSign}>+</div>
+              <div style={s.relationIdea}>
+                {tokenB.drawingDataUrl && <img src={tokenB.drawingDataUrl} alt="" style={s.sketch} />}
+                <div style={s.relationIdeaTitle}>{tokenB.ai_metadata?.title || tokenB.text}</div>
+                <div style={s.relationIdeaDesc}>{tokenB.ai_metadata?.summary || tokenB.description}</div>
               </div>
-
-              <div style={styles.questionSection}>
-                <div style={styles.questionLabel}>Creatieve vraag:</div>
-                <div style={styles.questionText}>{explanation.question}</div>
-              </div>
+            </div>
+            <div style={s.reasonsBlock}>
+              <p style={s.reasonsIntro}>Sluiten op elkaar aan omdat:</p>
+              <ul style={s.reasonsList}>
+                {reasons.map((r, i) => (
+                  <li key={i} style={s.reasonItem}><span style={s.bullet}>•</span><span>{renderReason(r)}</span></li>
+                ))}
+              </ul>
+            </div>
+            <div style={s.questionBlock}>
+              <p style={s.questionLabel}>Vraag voor de groep</p>
+              <p style={s.questionText}>{question}</p>
             </div>
           </div>
         </div>
@@ -443,712 +313,372 @@ export function SystemInsights() {
     }
   }
 
-  const hasIdeas = tokens.length > 0;
-  const hasClusters = clusterCards.length > 0;
-
-  if (!hasIdeas) {
-    return (
-      <div style={styles.landingRoot} className="animate-fade-in">
-        <div style={styles.landingContainer}>
-          <h1 style={styles.landingTitle}>Sessie gestart</h1>
-          <p style={styles.landingSubtitle}>
-            Verbind je telefoon om je eerste idee toe te voegen.
-          </p>
-
-          <div style={styles.landingCard}>
-            <div style={styles.landingCardLeft}>
-              <div style={styles.landingQrWrapper}>
-                <QRCodeSVG
-                  value={getNetworkPhoneUrl(sessionId)}
-                  size={120}
-                  bgColor="#ffffff"
-                  fgColor="#09090b"
-                />
-              </div>
-              <span style={styles.landingCardLabel}>SCAN MET JE TELEFOON</span>
-            </div>
-
-            <div style={styles.landingDivider} />
-
-            <div style={styles.landingCardRight}>
-              <span style={styles.landingCardLabel}>SESSIECODE</span>
-              <span style={styles.landingSessionCode}>
-                {sessionId.replace(/^mobus-/, '')}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // ── Live session: two-column layout ──────────────────────────────────────
   return (
-    <div style={styles.root} className="animate-fade-in">
-      <style>{`
-        @keyframes thinking-pulse {
-          0% { box-shadow: 0 0 0 0 rgba(127, 211, 140, 0.7); }
-          70% { box-shadow: 0 0 0 8px rgba(127, 211, 140, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(127, 211, 140, 0); }
-        }
-        .pulse-active {
-          animation: thinking-pulse 1.6s infinite;
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        .animate-fade-in {
-          animation: fadeIn 0.4s ease-out forwards;
-        }
-      `}</style>
-      <div style={styles.container}>
-        <header style={styles.header}>
-          <div style={styles.headerContent}>
-            <div>
-              <h1 style={styles.title}>Overzicht</h1>
-              <p style={styles.subtitle}>Terwijl jullie ideeën groeien, ontdekt MOBUS patronen, connecties en nieuwe richtingen.</p>
+    <div style={s.root} className="anim-fade-in">
+      <WallStyles />
+      <div style={s.layout}>
+
+        {/* Left strip: session + thinking indicator */}
+        <aside style={s.sidebar}>
+          <div style={s.sidebarInner}>
+            <p style={s.sidebarEyebrow}>MOBUS</p>
+            <div style={s.qrWrap}>
+              <QRCodeSVG value={getNetworkPhoneUrl(sessionId)} size={80} bgColor="#ffffff" fgColor="#09090b" />
             </div>
-            
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-              <div style={{
-                ...styles.thinkingIndicator,
-                opacity: isThinking ? 1 : 0.45
-              }}>
-                <span
-                  className={isThinking ? "pulse-active" : ""}
-                  style={isThinking ? styles.thinkingDotActive : styles.thinkingDotIdle}
-                />
-                <span style={styles.thinkingText}>
-                  {isThinking ? "MOBUS denkt mee" : "MOBUS stand-by"}
-                </span>
-              </div>
+            <span style={s.sidebarSessionCode}>{sessionId.replace(/^mobus-/, '')}</span>
+
+            <div style={{ ...s.thinkingBadge, opacity: isThinking ? 1 : 0.4 }}>
+              <span style={isThinking ? s.dotActive : s.dotIdle} className={isThinking ? 'pulse-dot' : ''} />
+              <span style={s.thinkingText}>{isThinking ? 'observeert…' : 'stand-by'}</span>
+            </div>
+
+            <div style={s.tokenCount}>
+              <span style={s.tokenCountNum}>{tokens.length}</span>
+              <span style={s.tokenCountLabel}>{tokens.length === 1 ? 'idee' : 'ideeën'}</span>
             </div>
           </div>
-        </header>
+        </aside>
 
-        {/* ── Main Viewport Layout ── */}
-        <div style={styles.mainLayout}>
-          {/* ── Left Column: Live AI Reflection ── */}
-          <div style={styles.leftColumn}>
-            {insight && insight.state !== "standby" ? (
-              <div style={styles.liveInsightCard} className="animate-fade-in">
-                <div style={styles.liveInsightHeader}>
-                  <span style={styles.liveInsightBadge}>
-                    ✨ {insight.state === "suggestion" ? "AI Suggestie" : insight.state === "reflection" ? "AI Reflectievraag" : "AI Samenvatting"}
-                  </span>
-                  {insight.themeLabel && (
-                    <span style={styles.liveInsightTheme}>{insight.themeLabel}</span>
-                  )}
-                </div>
-                <h3 style={styles.liveInsightTitle}>{insight.title}</h3>
-                <p style={styles.liveInsightMessage}>{insight.message}</p>
-              </div>
-            ) : (
-              <div style={styles.liveInsightStandbyCard} className="animate-fade-in">
-                <span style={styles.liveInsightStandbyBadge}>🔮 MOBUS stand-by</span>
-                <p style={styles.liveInsightStandbyText}>
-                  Beweeg ideeën op de tafel om patronen, groepen en AI-inzichten te ontdekken.
-                </p>
-              </div>
-            )}
-          </div>
+        {/* Main: live reflection panel */}
+        <main style={s.main}>
+          <LiveReflection state={wallState} firestoreInsight={firestoreInsight} />
+        </main>
 
-          {/* ── Right Column: Manual Groups Grid ── */}
-          <div style={styles.rightColumn}>
-            {hasIdeas && !hasClusters && (
-              <div style={styles.emptyState}>
-                <p style={styles.emptyTitle}>Nog geen groepjes</p>
-                <p style={styles.emptyDesc}>
-                  Sleep ideeën op de tafel naar elkaar toe om clusters te vormen. Ze verschijnen hier automatisch.
-                </p>
-                <div style={styles.ideaCount}>{tokens.length} {tokens.length === 1 ? 'idee' : 'ideeën'} op tafel</div>
-              </div>
-            )}
-
-            {hasClusters && (
-              <>
-                <div style={styles.statsRow}>
-                  <span style={styles.statChip}>{clusterCards.length} {clusterCards.length === 1 ? 'groep' : 'groepen'}</span>
-                  <span style={styles.statChip}>{tokens.length} ideeën totaal</span>
-                </div>
-
-                <div style={styles.cardGrid}>
-                  {clusterCards.map((card, idx) => (
-                    <div key={idx} style={styles.card}>
-                      <div style={styles.cardHeader}>
-                        <span style={styles.cardLabel}>{card.label}</span>
-                        <span style={styles.cardCount}>{card.ideas.length}</span>
-                      </div>
-
-                      <div style={styles.chipRow}>
-                        {card.ideas.map((idea, cIdx) => {
-                          const originalToken = tokens.find(t => t.text === idea.text || t.ai_metadata?.title === idea.text);
-                          return (
-                            <span key={cIdx} style={{
-                              ...styles.chip,
-                              flexDirection: 'column',
-                              alignItems: 'flex-start',
-                              gap: '0.25rem',
-                              padding: '0.5rem 0.75rem'
-                            }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                {idea.drawingDataUrl && (
-                                  <img
-                                    src={idea.drawingDataUrl}
-                                    alt=""
-                                    style={{
-                                      width: '32px',
-                                      height: '24px',
-                                      objectFit: 'contain',
-                                      backgroundColor: 'transparent',
-                                      borderRadius: '2px',
-                                    }}
-                                  />
-                                )}
-                                <span style={{ fontWeight: 600 }}>{originalToken?.ai_metadata?.title || idea.text}</span>
-                              </div>
-                              {originalToken?.ai_metadata?.summary && (
-                                <p style={{ margin: 0, fontSize: '0.75rem', color: '#52525b', maxWidth: '280px', lineHeight: '1.3' }}>
-                                  {originalToken.ai_metadata.summary}
-                                </p>
-                              )}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );
 }
 
-// ── Inline styles (wireframe, no CSS file needed) ──
-const styles: Record<string, React.CSSProperties> = {
+// ── Live Reflection Panel ────────────────────────────────────────────────────
+function LiveReflection({
+  state,
+  firestoreInsight,
+}: {
+  state: WallState;
+  firestoreInsight: { state: string; title: string; message: string; themeLabel?: string } | null;
+}) {
+  const [displayState, setDisplayState] = useState(state);
+  const [visible, setVisible] = useState(true);
+
+  // Fade between state transitions
+  useEffect(() => {
+    setVisible(false);
+    const t = setTimeout(() => {
+      setDisplayState(state);
+      setVisible(true);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [state.type, state.label, state.ideaA]);
+
+  const { type, label, ideaA, ideaB, count } = displayState;
+
+  // If Firestore AI insight is active and non-standby, prefer its message
+  const useFirestore = firestoreInsight && firestoreInsight.state !== 'standby'
+    && (type === 'ai_suggestion' || type === 'user_group');
+
+  const config: Record<WallStateType, { eyebrow: string; title: string; body: string; accent: string }> = {
+    standby: {
+      eyebrow: 'Tafel actief',
+      title: 'Beweeg ideeën om patronen te vormen.',
+      body: 'Breng tokens dicht bij elkaar. MOBUS observeert stille verbanden.',
+      accent: '#a1a1aa',
+    },
+    emerging: {
+      eyebrow: 'Er ontstaat iets',
+      title: 'Er groeit een mogelijke richting…',
+      body: 'Ideeën bewegen naar elkaar toe. Blijf ze bewegen om te zien wat verbindt.',
+      accent: '#6366f1',
+    },
+    user_group: {
+      eyebrow: 'Jullie hebben een groep gevormd',
+      title: 'Wat verbindt deze ideeën?',
+      body: useFirestore
+        ? firestoreInsight!.message
+        : `Jullie hebben ${count ?? 'meerdere'} ideeën samengebracht. Welk gedeeld verlangen of probleem zit hieronder?`,
+      accent: '#09090b',
+    },
+    ai_suggestion: {
+      eyebrow: 'AI ziet een verband',
+      title: useFirestore ? firestoreInsight!.title : 'Mogelijke relatie',
+      body: useFirestore
+        ? firestoreInsight!.message
+        : (ideaA && ideaB ? `AI ziet een mogelijke relatie tussen "${ideaA}" en "${ideaB}".` : 'AI ziet een mogelijke relatie tussen twee ideeën op de tafel.'),
+      accent: '#10b981',
+    },
+    tension: {
+      eyebrow: 'Interessante spanning',
+      title: ideaA && ideaB
+        ? `"${ideaA}" vs. "${ideaB}"`
+        : 'Deze ideeën botsen interessant.',
+      body: 'Jullie hebben ideeën met tegengestelde perspectieven samengebracht. Welke spanning zit er tussen de technische en menselijke kant?',
+      accent: '#f59e0b',
+    },
+    naming: {
+      eyebrow: 'Mogelijke naam voor deze groep',
+      title: label ?? 'Jullie groep heeft een thema.',
+      body: `${count ?? 'Deze'} ideeën lijken samen iets te zeggen. Hoe zouden jullie deze groep noemen?`,
+      accent: '#8b5cf6',
+    },
+  };
+
+  const { eyebrow, title, body, accent } = config[type];
+
+  return (
+    <div
+      style={{
+        ...s.reflectionPanel,
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translateY(0)' : 'translateY(12px)',
+        transition: 'opacity 0.35s ease-out, transform 0.35s ease-out',
+        borderLeft: `4px solid ${accent}`,
+      }}
+    >
+      <p style={{ ...s.reflectionEyebrow, color: accent }}>{eyebrow}</p>
+      <h2 style={s.reflectionTitle}>{title}</h2>
+      <p style={s.reflectionBody}>{body}</p>
+
+      {type === 'standby' && (
+        <div style={s.standbyHint}>
+          <span style={s.standbyDot} />
+          <span style={s.standbyHintText}>Wacht op beweging op de tafel</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Injected CSS ─────────────────────────────────────────────────────────────
+function WallStyles() {
+  return (
+    <style>{`
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: 'Inter', system-ui, sans-serif; }
+
+      .anim-fade-in { animation: wallFadeIn 0.5s ease-out forwards; }
+      @keyframes wallFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+      .pulse-dot { animation: pulseDot 1.4s infinite ease-in-out; }
+      @keyframes pulseDot {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.5); }
+        60%       { box-shadow: 0 0 0 6px rgba(99,102,241,0); }
+      }
+    `}</style>
+  );
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+const s: Record<string, React.CSSProperties> = {
+  // Root
   root: {
-    width: '100vw',
-    height: '100vh',
+    width: '100vw', height: '100vh',
     backgroundColor: '#f4f4f5',
+    fontFamily: "'Inter', system-ui, sans-serif",
+    color: '#09090b',
     overflow: 'hidden',
-    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
-    color: '#09090b',
-    boxSizing: 'border-box',
   },
-  container: {
-    width: '100%',
-    height: '100%',
-    padding: '2rem 3rem',
+  layout: {
+    width: '100%', height: '100%',
     display: 'flex',
-    flexDirection: 'column',
-    boxSizing: 'border-box',
-  },
-  header: {
-    marginBottom: '1.5rem',
-    flexShrink: 0,
-  },
-  headerContent: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '1rem',
-  },
-  mainLayout: {
-    flex: 1,
-    display: 'flex',
-    gap: '2.5rem',
-    minHeight: 0,
-  },
-  leftColumn: {
-    width: '320px',
-    flexShrink: 0,
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  rightColumn: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    minHeight: 0,
-  },
-  thinkingIndicator: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    backgroundColor: '#ffffff',
-    border: '1px solid #a1a1aa',
-    borderRadius: 4,
-    padding: '0.4rem 0.8rem',
-    transition: 'all 0.3s ease',
-  },
-  thinkingDotActive: {
-    width: 10,
-    height: 10,
-    borderRadius: '50%',
-    backgroundColor: '#7fd38c',
-    display: 'inline-block',
-  },
-  thinkingDotIdle: {
-    width: 10,
-    height: 10,
-    borderRadius: '50%',
-    backgroundColor: '#d4d4d8',
-    display: 'inline-block',
-  },
-  thinkingText: {
-    fontSize: '0.8rem',
-    fontWeight: 700,
-    color: '#09090b',
-    fontFamily: "'Inter', sans-serif",
-  },
-  title: {
-    fontSize: '2rem',
-    fontWeight: 700,
-    margin: '0 0 0.25rem 0',
-    letterSpacing: '-0.02em',
-  },
-  subtitle: {
-    fontSize: '0.95rem',
-    color: '#71717a',
-    margin: 0,
-  },
-  // Stats
-  statsRow: {
-    display: 'flex',
-    gap: '0.75rem',
-    marginBottom: '1rem',
-    flexShrink: 0,
-  },
-  statChip: {
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    color: '#52525b',
-    backgroundColor: '#e4e4e7',
-    border: '1px solid #a1a1aa',
-    borderRadius: 4,
-    padding: '0.3rem 0.75rem',
-  },
-  // Cards
-  cardGrid: {
-    display: 'flex',
-    flexDirection: 'row' as const,
-    gap: '1.25rem',
-    overflowX: 'auto',
-    overflowY: 'hidden',
-    flex: 1,
-    minHeight: 0,
-    paddingBottom: '0.75rem',
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    border: '1px solid #a1a1aa',
-    borderRadius: 4,
-    padding: '1.25rem 1.5rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.75rem',
-    width: '340px',
-    flexShrink: 0,
-    maxHeight: '100%',
-    boxSizing: 'border-box',
-  },
-  cardHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  cardLabel: {
-    fontSize: '1.1rem',
-    fontWeight: 700,
-    color: '#09090b',
-  },
-  cardCount: {
-    fontSize: '0.75rem',
-    fontWeight: 700,
-    color: '#71717a',
-    backgroundColor: '#f4f4f5',
-    border: '1px solid #a1a1aa',
-    borderRadius: 9999,
-    padding: '0.15rem 0.55rem',
-    minWidth: 24,
-    textAlign: 'center' as const,
-  },
-  // Chips
-  chipRow: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.5rem',
-    overflowY: 'auto',
-    flex: 1,
-    minHeight: 0,
-    paddingRight: '0.25rem',
-  },
-  chip: {
-    fontSize: '0.825rem',
-    fontWeight: 500,
-    color: '#27272a',
-    backgroundColor: '#f4f4f5',
-    border: '1px solid #d4d4d8',
-    borderRadius: 4,
-    padding: '0.3rem 0.65rem',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.4rem',
-  },
-  // Suggestion
-  suggestion: {
-    fontSize: '0.875rem',
-    color: '#52525b',
-    fontStyle: 'italic',
-    margin: 0,
-    paddingTop: '0.25rem',
-    borderTop: '1px solid #e4e4e7',
-  },
-  liveInsightCard: {
-    backgroundColor: '#ffffff',
-    border: '2px solid #09090b',
-    borderRadius: 4,
-    padding: '1.5rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.75rem',
-    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
-  },
-  liveInsightHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  liveInsightBadge: {
-    fontSize: '0.75rem',
-    fontWeight: 750,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    color: '#ffffff',
-    backgroundColor: '#09090b',
-    border: '1px solid #09090b',
-    borderRadius: 4,
-    padding: '0.25rem 0.6rem',
-  },
-  liveInsightTheme: {
-    fontSize: '0.75rem',
-    fontWeight: 650,
-    color: '#52525b',
-    backgroundColor: '#f4f4f5',
-    border: '1px solid #d4d4d8',
-    borderRadius: 4,
-    padding: '0.25rem 0.6rem',
-  },
-  liveInsightTitle: {
-    fontSize: '1.35rem',
-    fontWeight: 900,
-    margin: 0,
-    letterSpacing: '-0.02em',
-    color: '#09090b',
-  },
-  liveInsightMessage: {
-    fontSize: '1.05rem',
-    color: '#27272a',
-    lineHeight: 1.5,
-    margin: 0,
-    fontWeight: 500,
-  },
-  liveInsightStandbyCard: {
-    backgroundColor: '#ffffff',
-    border: '1px dashed #a1a1aa',
-    borderRadius: 4,
-    padding: '1.5rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.5rem',
-  },
-  liveInsightStandbyBadge: {
-    fontSize: '0.75rem',
-    fontWeight: 750,
-    color: '#71717a',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  liveInsightStandbyText: {
-    fontSize: '0.9rem',
-    color: '#a1a1aa',
-    margin: 0,
-    lineHeight: 1.5,
-  },
-  // Empty
-  emptyState: {
-    backgroundColor: '#ffffff',
-    border: '1px solid #a1a1aa',
-    borderRadius: 4,
-    padding: '3rem 2rem',
-    textAlign: 'center' as const,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    gap: '0.5rem',
-  },
-  emptyTitle: {
-    fontSize: '1.1rem',
-    fontWeight: 700,
-    margin: 0,
-  },
-  emptyDesc: {
-    fontSize: '0.9rem',
-    color: '#71717a',
-    margin: 0,
-    maxWidth: '36ch',
-    lineHeight: 1.5,
-  },
-  ideaCount: {
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    color: '#52525b',
-    backgroundColor: '#f4f4f5',
-    border: '1px solid #d4d4d8',
-    borderRadius: 4,
-    padding: '0.3rem 0.75rem',
-    marginTop: '0.5rem',
-  },
-  // Loading
-  loadingWrapper: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f4f4f5',
-  },
-  loadingText: {
-    fontSize: '1rem',
-    color: '#71717a',
   },
 
-  landingRoot: {
-    width: '100vw',
-    height: '100vh',
-    backgroundColor: '#f4f4f5',
+  // Sidebar
+  sidebar: {
+    width: '200px',
+    flexShrink: 0,
+    borderRight: '1px solid #e4e4e7',
+    backgroundColor: '#ffffff',
+    padding: '2rem 1.5rem',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  sidebarInner: {
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.25rem',
+  },
+  sidebarEyebrow: {
+    fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.12em',
+    color: '#a1a1aa', textTransform: 'uppercase', margin: 0,
+  },
+  sidebarSessionCode: {
+    fontSize: '2rem', fontWeight: 800, fontFamily: 'monospace',
+    color: '#09090b', letterSpacing: '0.05em', lineHeight: 1,
+  },
+  thinkingBadge: {
+    display: 'flex', alignItems: 'center', gap: '0.4rem',
+    backgroundColor: '#f4f4f5', border: '1px solid #e4e4e7',
+    borderRadius: 99, padding: '0.3rem 0.7rem',
+    transition: 'opacity 0.4s ease',
+  },
+  dotActive: {
+    width: 8, height: 8, borderRadius: '50%',
+    backgroundColor: '#6366f1', display: 'inline-block',
+  },
+  dotIdle: {
+    width: 8, height: 8, borderRadius: '50%',
+    backgroundColor: '#d4d4d8', display: 'inline-block',
+  },
+  thinkingText: {
+    fontSize: '0.7rem', fontWeight: 600, color: '#52525b',
+  },
+  tokenCount: {
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.15rem',
+    marginTop: 'auto',
+  },
+  tokenCountNum: {
+    fontSize: '2.5rem', fontWeight: 800, color: '#09090b', lineHeight: 1,
+  },
+  tokenCountLabel: {
+    fontSize: '0.7rem', fontWeight: 600, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.08em',
+  },
+
+  // Main reflection
+  main: {
+    flex: 1,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+    padding: '4rem 5rem',
+  },
+  reflectionPanel: {
+    maxWidth: '680px',
+    width: '100%',
+    padding: '3rem 3.5rem',
+    backgroundColor: '#ffffff',
+    borderRadius: 4,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1.25rem',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)',
+  },
+  reflectionEyebrow: {
+    fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.12em',
+    textTransform: 'uppercase', margin: 0,
+  },
+  reflectionTitle: {
+    fontSize: '2.4rem', fontWeight: 800, lineHeight: 1.2,
+    letterSpacing: '-0.02em', color: '#09090b', margin: 0,
+  },
+  reflectionBody: {
+    fontSize: '1.15rem', fontWeight: 400, color: '#52525b',
+    lineHeight: 1.65, margin: 0,
+  },
+  standbyHint: {
+    display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem',
+  },
+  standbyDot: {
+    width: 6, height: 6, borderRadius: '50%',
+    backgroundColor: '#d4d4d8', display: 'inline-block',
+    animation: 'none',
+  },
+  standbyHintText: {
+    fontSize: '0.8rem', color: '#a1a1aa', fontStyle: 'italic',
+  },
+
+  // Landing (no ideas)
+  landingRoot: {
+    width: '100vw', height: '100vh',
+    backgroundColor: '#f4f4f5',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontFamily: "'Inter', system-ui, sans-serif",
     color: '#09090b',
   },
-  landingContainer: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    justifyContent: 'center',
-    textAlign: 'center' as const,
-    gap: '1rem',
+  landingInner: {
+    display: 'flex', alignItems: 'center', gap: '4rem',
+    backgroundColor: '#ffffff',
+    border: '1px solid #e4e4e7',
+    borderRadius: 8, padding: '3.5rem 4rem',
+    boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
+  },
+  landingLeft: {
+    display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: 340,
+  },
+  landingEyebrow: {
+    fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.12em',
+    color: '#a1a1aa', textTransform: 'uppercase', margin: 0,
   },
   landingTitle: {
-    fontSize: '2.5rem',
-    fontWeight: 800,
-    margin: 0,
-    letterSpacing: '-0.02em',
-    color: '#09090b',
+    fontSize: '3rem', fontWeight: 800, margin: 0, letterSpacing: '-0.025em',
   },
   landingSubtitle: {
-    fontSize: '1.1rem',
-    color: '#52525b',
-    margin: '0 0 1.5rem 0',
+    fontSize: '1.1rem', color: '#71717a', margin: 0, lineHeight: 1.6,
   },
-  landingCard: {
-    backgroundColor: '#ffffff',
-    border: '1px solid #e4e4e7',
-    borderRadius: 8,
-    padding: '2.5rem 3rem',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '2.5rem',
+  landingDivider: { width: 1, height: 140, backgroundColor: '#e4e4e7' },
+  landingRight: {
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem',
   },
-  landingCardLeft: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    gap: '0.75rem',
+  qrWrap: {
+    padding: '0.5rem', backgroundColor: '#ffffff',
+    border: '1px solid #e4e4e7', borderRadius: 4,
   },
-  landingQrWrapper: {
-    padding: '0.5rem',
-    backgroundColor: '#ffffff',
-    border: '1px solid #e4e4e7',
-    borderRadius: 4,
+  qrLabel: {
+    fontSize: '0.65rem', fontWeight: 700, color: '#71717a',
+    textTransform: 'uppercase', letterSpacing: '0.1em',
   },
-  landingCardLabel: {
-    fontSize: '0.65rem',
-    fontWeight: 700,
-    color: '#71717a',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.1em',
+  sessionCode: {
+    fontSize: '3rem', fontWeight: 800, fontFamily: 'monospace',
+    color: '#09090b', letterSpacing: '0.06em', lineHeight: 1,
   },
-  landingDivider: {
-    width: 1,
-    height: 120,
-    backgroundColor: '#e4e4e7',
+
+  // Active relation
+  relationRoot: {
+    width: '100vw', height: '100vh', backgroundColor: '#f4f4f5',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontFamily: "'Inter', system-ui, sans-serif", color: '#09090b',
+    padding: '2rem', boxSizing: 'border-box' as const,
   },
-  landingCardRight: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '0.75rem',
-    minWidth: 160,
+  relationCard: {
+    backgroundColor: '#ffffff', border: '2px solid #09090b',
+    borderRadius: 8, padding: '3rem',
+    maxWidth: 900, width: '100%', boxSizing: 'border-box' as const,
+    boxShadow: '0 20px 40px rgba(0,0,0,0.08)',
+    display: 'flex', flexDirection: 'column' as const, gap: '2rem',
   },
-  landingSessionCode: {
-    fontSize: '3.25rem',
-    fontWeight: 800,
-    fontFamily: "monospace, 'Courier New', Courier",
-    color: '#09090b',
-    letterSpacing: '0.05em',
-    lineHeight: 1,
+  relationEyebrow: {
+    fontSize: '0.8rem', fontWeight: 700, color: '#10b981',
+    textTransform: 'uppercase' as const, letterSpacing: '0.12em',
+    textAlign: 'center' as const, margin: 0,
   },
-  activeRelationRoot: {
-    width: '100vw',
-    height: '100vh',
-    backgroundColor: '#f4f4f5',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
-    color: '#09090b',
-    padding: '2rem',
-    boxSizing: 'border-box' as const,
+  relationRow: {
+    display: 'flex', alignItems: 'stretch', gap: '2rem',
   },
-  activeRelationContainer: {
-    maxWidth: 900,
-    width: '100%',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
+  relationIdea: {
+    flex: 1, backgroundColor: '#f4f4f5', border: '1px solid #e4e4e7',
+    borderRadius: 6, padding: '2rem',
+    display: 'flex', flexDirection: 'column' as const,
+    alignItems: 'center', textAlign: 'center' as const, gap: '0.5rem',
   },
-  activeRelationCard: {
-    backgroundColor: '#ffffff',
-    border: '2px solid #09090b',
-    borderRadius: 8,
-    padding: '3rem',
-    width: '100%',
-    boxSizing: 'border-box' as const,
-    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '2.5rem',
-    position: 'relative' as const,
-    backgroundImage: `
-      repeating-linear-gradient(0deg, transparent 0px, transparent 24px, #f4f4f5 24px, #f4f4f5 25px),
-      repeating-linear-gradient(90deg, transparent 0px, transparent 24px, #f4f4f5 24px, #f4f4f5 25px)
-    `,
-    backgroundSize: '25px 25px',
-  },
-  cardHeaderSmall: {
-    fontSize: '0.9rem',
-    fontWeight: 700,
-    color: '#10b981',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.15em',
-    textAlign: 'center' as const,
-  },
-  activeRelationIdeasRow: {
-    display: 'flex',
-    alignItems: 'stretch',
-    justifyContent: 'space-between',
-    gap: '2rem',
-    width: '100%',
-  },
-  activeRelationIdea: {
-    flex: 1,
-    backgroundColor: '#f4f4f5',
-    border: '1px solid #d4d4d8',
-    borderRadius: 6,
-    padding: '2rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    textAlign: 'center' as const,
-    justifyContent: 'center',
-    boxShadow: 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.02)',
-  },
-  relationIdeaSketch: {
-    width: '120px',
-    height: '90px',
-    objectFit: 'contain' as const,
-    marginBottom: '1rem',
-    backgroundColor: 'transparent',
-  },
+  sketch: { width: 120, height: 90, objectFit: 'contain' as const },
   relationIdeaTitle: {
-    fontSize: '1.4rem',
-    fontWeight: 800,
-    color: '#09090b',
-    marginBottom: '0.5rem',
-    lineHeight: 1.3,
+    fontSize: '1.4rem', fontWeight: 800, color: '#09090b', lineHeight: 1.2,
   },
-  relationIdeaDesc: {
-    fontSize: '0.95rem',
-    color: '#71717a',
-    lineHeight: 1.5,
-  },
+  relationIdeaDesc: { fontSize: '0.9rem', color: '#71717a', lineHeight: 1.5 },
   plusSign: {
-    fontSize: '2.5rem',
-    fontWeight: 300,
-    color: '#a1a1aa',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    fontSize: '2.5rem', fontWeight: 300, color: '#a1a1aa',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
-  explanationSection: {
-    borderTop: '1px solid #e4e4e7',
-    paddingTop: '2rem',
-  },
-  explanationIntro: {
-    fontSize: '1.15rem',
-    fontWeight: 600,
-    color: '#52525b',
-    marginBottom: '1.25rem',
-  },
-  reasonsList: {
-    listStyleType: 'none',
-    padding: 0,
-    margin: 0,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.75rem',
-  },
-  reasonItem: {
-    fontSize: '1.1rem',
-    color: '#27272a',
-    lineHeight: 1.6,
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '0.75rem',
-  },
-  bullet: {
-    color: '#10b981',
-    fontWeight: 900,
-  },
-  questionSection: {
-    backgroundColor: '#ecfdf5',
-    border: '1px solid #a7f3d0',
-    borderRadius: 6,
-    padding: '2rem',
-    boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.05)',
+  reasonsBlock: { borderTop: '1px solid #e4e4e7', paddingTop: '1.5rem' },
+  reasonsIntro: { fontSize: '1rem', fontWeight: 600, color: '#52525b', margin: '0 0 1rem 0' },
+  reasonsList: { listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column' as const, gap: '0.5rem' },
+  reasonItem: { display: 'flex', gap: '0.6rem', fontSize: '1.05rem', color: '#27272a', lineHeight: 1.5 },
+  bullet: { color: '#10b981', fontWeight: 900 },
+  questionBlock: {
+    backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
+    borderRadius: 6, padding: '1.75rem',
   },
   questionLabel: {
-    fontSize: '0.9rem',
-    fontWeight: 700,
-    color: '#047857',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.08em',
-    marginBottom: '0.5rem',
+    fontSize: '0.75rem', fontWeight: 700, color: '#15803d',
+    textTransform: 'uppercase' as const, letterSpacing: '0.1em', margin: '0 0 0.5rem 0',
   },
   questionText: {
-    fontSize: '1.3rem',
-    fontWeight: 700,
-    color: '#064e3b',
-    lineHeight: 1.4,
+    fontSize: '1.35rem', fontWeight: 700, color: '#14532d', lineHeight: 1.4, margin: 0,
   },
+
+  // Loading
+  loadingRoot: {
+    width: '100vw', height: '100vh', backgroundColor: '#f4f4f5',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontFamily: "'Inter', system-ui, sans-serif",
+  },
+  loadingText: { fontSize: '1rem', color: '#71717a' },
 };

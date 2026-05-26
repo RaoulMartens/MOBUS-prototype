@@ -378,16 +378,15 @@ export function TokenClusteringCanvas() {
     return thumbnailIds;
   };
 
-  function calculateGrassAreas() {
-    const WILT_TIME = 30000;
-    const clusterData: Array<{
+  // Soft proximity blobs: user-created spatial fields — no label, no lock
+  // Returns blob data for connected components of 2+ tokens
+  function calculateProximityBlobs() {
+    const blobData: Array<{
       id: string;
       x: number;
       y: number;
       radius: number;
-      size: number;
-      lastInteracted: number;
-      isWilted: boolean;
+      isStable: boolean; // held together > 3s without interaction = stronger visual
     }> = [];
 
     const visited = new Set<string>();
@@ -401,51 +400,37 @@ export function TokenClusteringCanvas() {
       while (toVisit.length > 0) {
         const current = toVisit.pop()!;
         visited.add(current);
-
         connections.forEach(c => {
-          if (c.from === current && !visited.has(c.to)) {
-            cluster.add(c.to);
-            toVisit.push(c.to);
-          }
-          if (c.to === current && !visited.has(c.from)) {
-            cluster.add(c.from);
-            toVisit.push(c.from);
-          }
+          if (c.from === current && !visited.has(c.to)) { cluster.add(c.to); toVisit.push(c.to); }
+          if (c.to === current && !visited.has(c.from)) { cluster.add(c.from); toVisit.push(c.from); }
         });
       }
 
-      // Any group of 2 or more forms a cluster circle
       if (cluster.size >= 2) {
-        const clusterTokens = Array.from(cluster).map(id =>
-          canvasTokens.find(t => t.id === id)
-        ).filter(t => t !== undefined) as CanvasToken[];
+        const clusterTokens = Array.from(cluster)
+          .map(id => canvasTokens.find(t => t.id === id))
+          .filter((t): t is CanvasToken => t !== undefined);
 
         if (clusterTokens.length > 0) {
           const avgX = clusterTokens.reduce((sum, t) => sum + t.x, 0) / clusterTokens.length;
           const avgY = clusterTokens.reduce((sum, t) => sum + t.y, 0) / clusterTokens.length;
-          const lastInteracted = Math.max(...clusterTokens.map(t => t.lastInteracted || 0));
-          const timeSinceInteraction = currentTime - lastInteracted;
-
-          // Bounding circle calculation: max distance from center to any token
           const maxDist = Math.max(...clusterTokens.map(t => getDistance(avgX, avgY, t.x, t.y)));
-          const radius = Math.max(maxDist + 72, 80);
+          const radius = Math.max(maxDist + 88, 100);
+          const lastTouched = Math.max(...clusterTokens.map(t => t.lastInteracted || 0));
+          const quietMs = currentTime - lastTouched;
 
-          const clusterId = Array.from(cluster).sort().join(',');
-
-          clusterData.push({
-            id: clusterId,
+          blobData.push({
+            id: Array.from(cluster).sort().join(','),
             x: avgX,
             y: avgY,
             radius,
-            size: clusterTokens.length,
-            lastInteracted,
-            isWilted: timeSinceInteraction > WILT_TIME
+            isStable: quietMs > 3000, // stable = untouched for 3s
           });
         }
       }
     });
 
-    return clusterData;
+    return blobData;
   }
 
   // Sync database tokens to canvas tokens
@@ -640,56 +625,7 @@ export function TokenClusteringCanvas() {
 
 
 
-  // Self-centering tabletop force: centers idea groups when quiet
-  useEffect(() => {
-    if (canvasTokens.length === 0) return;
-
-    const interval = setInterval(() => {
-      const lastInteractedMax = Math.max(...canvasTokensRef.current.map(t => t.lastInteracted || 0));
-      const isQuiet = Date.now() - lastInteractedMax > 4000; // 4 seconds quiet time
-
-      if (isQuiet && canvasRef.current) {
-        const rect = canvasRef.current.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return;
-
-        const centerX = rect.width / 2;
-        const centerY = rect.height / 2;
-
-        const avgX = canvasTokensRef.current.reduce((sum, t) => sum + t.x, 0) / canvasTokensRef.current.length;
-        const avgY = canvasTokensRef.current.reduce((sum, t) => sum + t.y, 0) / canvasTokensRef.current.length;
-
-        const dx = centerX - avgX;
-        const dy = centerY - avgY;
-
-        // If off-center by more than 60px, shift slightly (smooth organic centering)
-        if (Math.abs(dx) > 60 || Math.abs(dy) > 60) {
-          setCanvasTokens(prev => {
-            const updated = prev.map(token => {
-              const newX = token.x + dx * 0.15;
-              const constrainedY = Math.max(token.y + dy * 0.15, TOP_RESTRICTED_AREA + 50);
-
-              // Sync position to Firestore in the background
-              updateTokenPosition(token.id, { x: newX, y: constrainedY });
-
-              return {
-                ...token,
-                x: newX,
-                y: constrainedY,
-                lastInteracted: Date.now()
-              };
-            });
-            canvasTokensRef.current = updated;
-            return updated;
-          });
-        }
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [canvasTokens.length, updateTokenPosition]);
-
-  // AI Prompt collapsing timer: collapses full prompts after 5 seconds
-  const grassAreas = calculateGrassAreas();
+  const proximityBlobs = calculateProximityBlobs();
 
   const isInArchiveZone = (x: number, y: number) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -1183,27 +1119,25 @@ export function TokenClusteringCanvas() {
           }
         })}
 
-        {/* Dynamic cluster circles */}
-        {grassAreas.map((area) => {
-          return (
-            <div
-              key={`cluster-${area.id}`}
-              className="absolute pointer-events-none cluster-glowing-circle"
-              style={{
-                left: `${area.x}px`,
-                top: `${area.y}px`,
-                width: `${area.radius * 2}px`,
-                height: `${area.radius * 2}px`,
-                transform: 'translate(-50%, -50%)',
-                borderRadius: '50%',
-                border: '2px solid #10b981',
-                background: 'transparent',
-                opacity: 0.8,
-                zIndex: 5,
-              }}
-            />
-          );
-        })}
+        {/* Soft proximity blobs — user-created spatial fields, no label, no lock */}
+        {proximityBlobs.map((blob) => (
+          <div
+            key={`blob-${blob.id}`}
+            className="absolute pointer-events-none proximity-blob"
+            style={{
+              left: `${blob.x}px`,
+              top: `${blob.y}px`,
+              width: `${blob.radius * 2}px`,
+              height: `${blob.radius * 2}px`,
+              transform: 'translate(-50%, -50%)',
+              borderRadius: '50%',
+              background: blob.isStable
+                ? 'radial-gradient(ellipse at center, rgba(0,0,0,0.045) 0%, rgba(0,0,0,0.018) 55%, transparent 100%)'
+                : 'radial-gradient(ellipse at center, rgba(0,0,0,0.025) 0%, rgba(0,0,0,0.008) 55%, transparent 100%)',
+              zIndex: 2,
+            }}
+          />
+        ))}
 
         {/* Tokens */}
         {canvasTokens.map((token) => {
@@ -1376,25 +1310,10 @@ export function TokenClusteringCanvas() {
             border-width: 0.5px;
           }
         }
-        .cluster-glowing-circle {
-          transition-property: left, top, width, height, opacity, border-color !important;
-          transition-duration: 0.4s !important;
+        .proximity-blob {
+          transition-property: left, top, width, height, opacity, background !important;
+          transition-duration: 0.6s !important;
           transition-timing-function: cubic-bezier(0.25, 1, 0.5, 1) !important;
-          box-shadow: 0 0 16px rgba(16, 185, 129, 0.35), inset 0 0 12px rgba(16, 185, 129, 0.15) !important;
-        }
-        .cluster-targeted-pulse {
-          box-shadow: 0 0 24px rgba(251, 191, 36, 0.6), inset 0 0 16px rgba(251, 191, 36, 0.3) !important;
-          animation: clusterTargetPulse 2s infinite ease-in-out;
-        }
-        @keyframes clusterTargetPulse {
-          0%, 100% {
-            transform: translate(-50%, -50%) scale(1);
-            opacity: 0.8;
-          }
-          50% {
-            transform: translate(-50%, -50%) scale(1.02);
-            opacity: 0.95;
-          }
         }
         .suggested-relation-group {
           animation: suggestionPulse 2.5s infinite ease-in-out;
