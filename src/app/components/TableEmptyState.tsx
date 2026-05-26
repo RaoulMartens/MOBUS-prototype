@@ -26,6 +26,12 @@ export function TableEmptyState() {
       const parentRect = container.getBoundingClientRect();
       const textRect = textNode.getBoundingClientRect();
 
+      // Guard: wait until layout has loaded with non-zero width/height
+      if (parentRect.width === 0 || textRect.width === 0) {
+        animationId = requestAnimationFrame(update);
+        return;
+      }
+
       // Bounds with 32px padding
       const padding = 32;
       const minX = padding;
