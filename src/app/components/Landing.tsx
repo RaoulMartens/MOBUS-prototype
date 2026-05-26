@@ -16,17 +16,24 @@ interface LandingProps {
   onEnter: () => void;
 }
 
-const SESSION_CODE = '6028';
-
 export function Landing({ onEnter }: LandingProps) {
   const { updateSessionId } = useTokens();
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
   const [showSplitScreen, setShowSplitScreen] = useState(false);
 
+  const [sessionCode, setSessionCode] = useState(() => {
+    const lastSession = localStorage.getItem("sessionId");
+    if (lastSession && lastSession.startsWith("mobus-")) {
+      const code = lastSession.replace("mobus-", "");
+      if (/^\d{4}$/.test(code)) return code;
+    }
+    return String(Math.floor(1000 + Math.random() * 9000));
+  });
+
   useEffect(() => {
-    updateSessionId(`mobus-${SESSION_CODE}`);
-  }, []);
+    updateSessionId(`mobus-${sessionCode}`);
+  }, [sessionCode]);
 
   useEffect(() => {
     if (showSplitScreen) {
@@ -36,13 +43,23 @@ export function Landing({ onEnter }: LandingProps) {
     }
   }, [showSplitScreen]);
 
-  const sessionId = `mobus-${SESSION_CODE}`;
-  const phoneUrl = `${window.location.origin}/phone`;
+  const sessionId = `mobus-${sessionCode}`;
+  const phoneUrl = `${window.location.origin}/phone?sessionId=${sessionId}`;
   const tableUrl = `/table?sessionId=${sessionId}`;
   const overviewUrl = `/dev/wall?sessionId=${sessionId}`;
 
+  const handleCodeChange = (val: string) => {
+    const clean = val.replace(/\D/g, '').slice(0, 4);
+    setSessionCode(clean);
+  };
+
+  const handleNewSession = () => {
+    const newCode = String(Math.floor(1000 + Math.random() * 9000));
+    setSessionCode(newCode);
+  };
+
   const handleCopyCode = () => {
-    navigator.clipboard.writeText(SESSION_CODE);
+    navigator.clipboard.writeText(sessionCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -64,7 +81,7 @@ export function Landing({ onEnter }: LandingProps) {
             Terug
           </button>
           <span className="text-sm font-mono font-bold text-zinc-900 dark:text-zinc-50">
-            Sessie {SESSION_CODE}
+            Sessie {sessionCode}
           </span>
         </div>
 
@@ -99,7 +116,7 @@ export function Landing({ onEnter }: LandingProps) {
             Terug
           </button>
           <button
-            onClick={() => updateSessionId(sessionId)}
+            onClick={handleNewSession}
             className="rounded-full bg-zinc-950 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 transition-colors"
           >
             Nieuwe sessie
@@ -148,22 +165,34 @@ export function Landing({ onEnter }: LandingProps) {
                   </a>
                 </div>
 
-                <button
-                  onClick={handleCopyCode}
-                  className="md:min-w-48 rounded bg-zinc-50 dark:bg-zinc-950 px-6 py-5 text-center hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                  aria-label="Kopieer sessiecode"
-                >
+                <div className="md:min-w-48 rounded bg-zinc-50 dark:bg-zinc-950 px-6 py-5 text-center flex flex-col items-center">
                   <span className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">
                     Sessiecode
                   </span>
-                  <span className="block text-5xl font-black font-mono tracking-widest text-zinc-950 dark:text-zinc-50">
-                    {SESSION_CODE}
-                  </span>
-                  <span className="mt-3 flex items-center justify-center gap-1.5 text-xs font-bold text-zinc-500">
-                    {copied ? <Check size={13} /> : <Copy size={13} />}
-                    {copied ? 'Gekopieerd' : 'Kopieer code'}
-                  </span>
-                </button>
+                  <input
+                    type="text"
+                    value={sessionCode}
+                    onChange={(e) => handleCodeChange(e.target.value)}
+                    className="w-32 bg-transparent text-center text-4xl font-black font-mono tracking-widest text-zinc-950 dark:text-zinc-50 border-b border-zinc-300 focus:border-zinc-950 dark:focus:border-zinc-50 outline-none pb-1"
+                    maxLength={4}
+                    placeholder="0000"
+                  />
+                  <div className="flex gap-4 mt-4">
+                    <button
+                      onClick={handleCopyCode}
+                      className="flex items-center gap-1.5 text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                    >
+                      {copied ? <Check size={13} /> : <Copy size={13} />}
+                      {copied ? 'Gekopieerd' : 'Kopieer'}
+                    </button>
+                    <button
+                      onClick={handleNewSession}
+                      className="flex items-center gap-1.5 text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                    >
+                      <span>Nieuw</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </section>
 
