@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, onSnapshot, doc, updateDoc } from "firebase/firestore";
+import { getFirestore, collection, onSnapshot, doc, updateDoc, setDoc } from "firebase/firestore";
 
 // Manual .env file parsing
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -68,6 +68,9 @@ function subscribeToSessionFirestore(sessionId) {
         }
       }
     });
+
+    // Trigger live reflection logic when token layout/groups change
+    processLiveReflection(sessionId, snapshot);
   }, (err) => {
     console.error(`[Bridge] Firestore subscription failed for session ${sessionId}:`, err);
   });
@@ -384,6 +387,199 @@ const server = http.createServer(async (req, res) => {
 
   sendJson(res, 404, { error: "Not found" });
 });
+
+const sessionTimeouts = new Map();
+const lastProcessedSignatures = new Map();
+
+const getSessionSignature = (tokens, clusters) => {
+  const tokenIds = tokens.map(t => t.id).sort().join(",");
+  const clusterSigs = clusters.map(c => c.map(t => t.id).sort().join("-")).sort().join("|");
+  return `${tokenIds}::${clusterSigs}`;
+};
+
+async function writeLiveInsightToFirestore(sessionId, insight) {
+  try {
+    const docRef = doc(db, "sessions", sessionId, "state", "insight");
+    await setDoc(docRef, {
+      ...insight,
+      updatedAt: new Date().toISOString()
+    });
+    console.log(`[Bridge] Live insight written to Firestore for session ${sessionId}:`, insight.state);
+  } catch (e) {
+    console.error(`[Bridge] Failed to write live insight to Firestore for session ${sessionId}:`, e.message);
+  }
+}
+
+async function generateLiveInsight(sessionId, allTokens, clusters) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.error("[Bridge] GEMINI_API_KEY environment variable is not set, skipping live insight generation.");
+    return;
+  }
+
+  console.log(`[Bridge] Generating live insight for session ${sessionId} with ${allTokens.length} tokens and ${clusters.length} clusters...`);
+
+  // Build context
+  const ideasListText = allTokens.map(t => 
+    `- ID: ${t.id}, Title: "${t.text}", Description: "${t.description || "N/A"}"`
+  ).join("\n");
+
+  const clustersText = clusters.length > 0 
+    ? clusters.map((c, idx) => 
+        `Cluster ${idx + 1} (Name: "${c[0].ai_metadata?.cluster_name || "Unknown"}") contains token IDs: ${c.map(t => t.id).join(", ")}`
+      ).join("\n")
+    : "No manual clusters on the table yet.";
+
+  const systemPrompt = `You are the MOBUS live reflection engine. You observe the constellation of ideas on a creative brainstorming table.
+Your goal is to output a live insight or reflection prompt to be displayed on the Wall Screen. 
+It must be dynamic, directly context-aware, and speak in a supportive, inspiring way.
+
+Current Session Constellation:
+Active Ideas:
+${ideasListText}
+
+Manual Clusters:
+${clustersText}
+
+Choose the most appropriate state and generate a response matching this schema:
+- state: one of:
+  * "standby" (if no meaningful relationships or groups can be found)
+  * "suggestion" (if you see a potential relation between two unclustered ideas. E.g. "Beide ideeën lijken te gaan over schermgebruik. Wat wil je hierin verbeteren?")
+  * "reflection" (if a manual group has been formed and you want to ask a deep creative reflection question about it)
+  * "summary" (if you want to summarize the core shared concept of a manual group)
+- title: A short Dutch title (e.g. theme or name of the connection, max 4 words)
+- message: The live insight text, question, or prompt in Dutch. Do NOT use static templates. Be organic, varied, and specific. Reflect on tension, contrasting views, opportunity, or underlying needs.
+- themeLabel: An optional short Dutch category label (e.g. "Technologie", "Samenwerking", "Duurzaamheid")
+- relatedIdeaIds: Array of token IDs involved in this suggestion or reflection.
+- confidence: A number between 0.0 and 1.0.
+
+Provide strict JSON output matching this schema. All text fields must be in Dutch.`;
+
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [{ text: systemPrompt }]
+          }
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              state: { type: "STRING", enum: ["standby", "suggestion", "reflection", "summary"] },
+              title: { type: "STRING" },
+              message: { type: "STRING" },
+              themeLabel: { type: "STRING" },
+              relatedIdeaIds: {
+                type: "ARRAY",
+                items: { type: "STRING" }
+              },
+              confidence: { type: "NUMBER" }
+            },
+            required: ["state", "title", "message", "relatedIdeaIds", "confidence"]
+          }
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error status ${response.status}`);
+    }
+
+    const resJson = await response.json();
+    const generatedText = resJson.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!generatedText) throw new Error("Empty response");
+
+    const insight = JSON.parse(generatedText);
+    await writeLiveInsightToFirestore(sessionId, insight);
+  } catch (err) {
+    console.error(`[Bridge] Live insight generation failed for session ${sessionId}:`, err);
+  }
+}
+
+function processLiveReflection(sessionId, snapshot) {
+  const allTokens = [];
+  snapshot.forEach(docSnap => {
+    const data = docSnap.data();
+    if (data.status !== "archived") {
+      allTokens.push({
+        id: docSnap.id,
+        text: data.text || "",
+        description: data.description || "",
+        position: data.position || { x: 0, y: 0 },
+        ai_metadata: data.ai_metadata || null
+      });
+    }
+  });
+
+  // Calculate clusters
+  const SNAP_DISTANCE = 140;
+  const getDistance = (p1, p2) => Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
+  const adj = {};
+  allTokens.forEach(t => { adj[t.id] = []; });
+  for (let i = 0; i < allTokens.length; i++) {
+    for (let j = i + 1; j < allTokens.length; j++) {
+      if (getDistance(allTokens[i].position, allTokens[j].position) < SNAP_DISTANCE) {
+        adj[allTokens[i].id].push(allTokens[j].id);
+        adj[allTokens[j].id].push(allTokens[i].id);
+      }
+    }
+  }
+
+  const visited = new Set();
+  const clusters = [];
+  allTokens.forEach(t => {
+    if (visited.has(t.id)) return;
+    const comp = [];
+    const queue = [t.id];
+    visited.add(t.id);
+    while (queue.length > 0) {
+      const cid = queue.shift();
+      const tk = allTokens.find(x => x.id === cid);
+      if (tk) comp.push(tk);
+      (adj[cid] || []).forEach(nid => {
+        if (!visited.has(nid)) {
+          visited.add(nid);
+          queue.push(nid);
+        }
+      });
+    }
+    if (comp.length >= 2) clusters.push(comp);
+  });
+
+  const sig = getSessionSignature(allTokens, clusters);
+  const lastSig = lastProcessedSignatures.get(sessionId);
+
+  if (sig === lastSig) return;
+
+  if (sessionTimeouts.has(sessionId)) {
+    clearTimeout(sessionTimeouts.get(sessionId));
+  }
+
+  if (allTokens.length < 2) {
+    lastProcessedSignatures.set(sessionId, sig);
+    writeLiveInsightToFirestore(sessionId, {
+      state: "standby",
+      title: "",
+      message: "",
+      themeLabel: "",
+      relatedIdeaIds: [],
+      confidence: 0.0
+    });
+    return;
+  }
+
+  const timeout = setTimeout(() => {
+    lastProcessedSignatures.set(sessionId, sig);
+    generateLiveInsight(sessionId, allTokens, clusters);
+  }, 3500);
+
+  sessionTimeouts.set(sessionId, timeout);
+}
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`MOBUS local bridge listening on http://0.0.0.0:${PORT}`);

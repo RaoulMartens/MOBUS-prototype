@@ -1,6 +1,8 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useTokens } from '../contexts/TokenContext';
 import { QRCodeSVG } from 'qrcode.react';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../../firebase';
 
 // Network IPs injected by Vite at build time
 declare const __NETWORK_IPS__: string[];
@@ -231,6 +233,29 @@ export function SystemInsights() {
   const { tokens, loading, sessionId, activeRelation } = useTokens();
   const [isThinking, setIsThinking] = useState(false);
   const prevTokensSignature = useRef('');
+  const [insight, setInsight] = useState<{
+    state: 'standby' | 'suggestion' | 'reflection' | 'summary';
+    title: string;
+    message: string;
+    themeLabel?: string;
+    relatedIdeaIds: string[];
+    confidence: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    const insightRef = doc(db, "sessions", sessionId, "state", "insight");
+    const unsubscribe = onSnapshot(insightRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setInsight(snapshot.data() as any);
+      } else {
+        setInsight(null);
+      }
+    }, (err) => {
+      console.error("Error loading live insight:", err);
+    });
+    return () => unsubscribe();
+  }, [sessionId]);
 
   const clusterableTokens = useMemo(() => {
     return tokens;
@@ -501,6 +526,29 @@ export function SystemInsights() {
           </div>
         </header>
 
+        {/* ── Dynamic AI Reflection Component ── */}
+        {insight && insight.state !== "standby" ? (
+          <div style={styles.liveInsightCard} className="animate-fade-in">
+            <div style={styles.liveInsightHeader}>
+              <span style={styles.liveInsightBadge}>
+                ✨ {insight.state === "suggestion" ? "AI Suggestie" : insight.state === "reflection" ? "AI Reflectievraag" : "AI Samenvatting"}
+              </span>
+              {insight.themeLabel && (
+                <span style={styles.liveInsightTheme}>{insight.themeLabel}</span>
+              )}
+            </div>
+            <h3 style={styles.liveInsightTitle}>{insight.title}</h3>
+            <p style={styles.liveInsightMessage}>{insight.message}</p>
+          </div>
+        ) : (
+          <div style={styles.liveInsightStandbyCard} className="animate-fade-in">
+            <span style={styles.liveInsightStandbyBadge}>🔮 MOBUS stand-by</span>
+            <p style={styles.liveInsightStandbyText}>
+              Beweeg ideeën op de tafel om patronen, groepen en AI-inzichten te ontdekken.
+            </p>
+          </div>
+        )}
+
         {/* ── Ideas exist but no clusters yet ── */}
         {hasIdeas && !hasClusters && (
           <div style={styles.emptyState}>
@@ -564,10 +612,6 @@ export function SystemInsights() {
                       );
                     })}
                   </div>
-
-                  {card.suggestion && (
-                    <p style={styles.suggestion}>{card.suggestion}</p>
-                  )}
                 </div>
               ))}
             </div>
@@ -721,6 +765,79 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     paddingTop: '0.25rem',
     borderTop: '1px solid #e4e4e7',
+  },
+  liveInsightCard: {
+    backgroundColor: '#ffffff',
+    border: '2px solid #09090b',
+    borderRadius: 4,
+    padding: '1.5rem',
+    marginBottom: '2rem',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.75rem',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+  },
+  liveInsightHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  liveInsightBadge: {
+    fontSize: '0.75rem',
+    fontWeight: 750,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    color: '#ffffff',
+    backgroundColor: '#09090b',
+    border: '1px solid #09090b',
+    borderRadius: 4,
+    padding: '0.25rem 0.6rem',
+  },
+  liveInsightTheme: {
+    fontSize: '0.75rem',
+    fontWeight: 650,
+    color: '#52525b',
+    backgroundColor: '#f4f4f5',
+    border: '1px solid #d4d4d8',
+    borderRadius: 4,
+    padding: '0.25rem 0.6rem',
+  },
+  liveInsightTitle: {
+    fontSize: '1.35rem',
+    fontWeight: 900,
+    margin: 0,
+    letterSpacing: '-0.02em',
+    color: '#09090b',
+  },
+  liveInsightMessage: {
+    fontSize: '1.05rem',
+    color: '#27272a',
+    lineHeight: 1.5,
+    margin: 0,
+    fontWeight: 500,
+  },
+  liveInsightStandbyCard: {
+    backgroundColor: '#ffffff',
+    border: '1px dashed #a1a1aa',
+    borderRadius: 4,
+    padding: '1.5rem',
+    marginBottom: '2rem',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.5rem',
+  },
+  liveInsightStandbyBadge: {
+    fontSize: '0.75rem',
+    fontWeight: 750,
+    color: '#71717a',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+  liveInsightStandbyText: {
+    fontSize: '0.9rem',
+    color: '#a1a1aa',
+    margin: 0,
+    lineHeight: 1.5,
   },
   // Empty
   emptyState: {
