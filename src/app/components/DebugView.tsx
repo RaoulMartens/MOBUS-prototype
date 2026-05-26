@@ -51,7 +51,7 @@ export function DebugView() {
       await updateDoc(docRef, { status: "pending_classification" });
       
       // 2. Call local bridge classification endpoint
-      const bridgeUrl = `http://${window.location.hostname}:8787`;
+      const bridgeUrl = "http://localhost:8787";
       await fetch(`${bridgeUrl}/api/sessions/${encodeURIComponent(sessionId)}/tokens/${encodeURIComponent(tokenId)}/classify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

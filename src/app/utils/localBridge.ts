@@ -1,6 +1,5 @@
 const getBridgeBaseUrl = () => {
-  const { hostname } = window.location;
-  return `http://${hostname}:8787`;
+  return "http://localhost:8787";
 };
 
 export async function classifyTokenOnBridge(sessionId: string, tokenId: string, text: string, description: string) {

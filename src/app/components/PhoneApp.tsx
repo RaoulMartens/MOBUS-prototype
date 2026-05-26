@@ -716,7 +716,7 @@ export function PhoneApp() {
       }
 
       // Trigger classification asynchronously
-      const bridgeUrl = `http://${window.location.hostname}:8787`;
+      const bridgeUrl = "http://localhost:8787";
       fetch(`${bridgeUrl}/api/sessions/${encodeURIComponent(sessionId)}/tokens/${encodeURIComponent(newSeedId)}/classify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -829,7 +829,7 @@ export function PhoneApp() {
       await setDoc(docRef, payload, { merge: true });
 
       if (formStatus !== "archived") {
-        const bridgeUrl = `http://${window.location.hostname}:8787`;
+        const bridgeUrl = "http://localhost:8787";
         fetch(`${bridgeUrl}/api/sessions/${encodeURIComponent(sessionId)}/tokens/${encodeURIComponent(targetId)}/classify`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

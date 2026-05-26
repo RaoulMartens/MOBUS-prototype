@@ -2,6 +2,8 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, onSnapshot, doc, updateDoc } from "firebase/firestore";
 
 // Manual .env file parsing
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,6 +22,57 @@ if (fs.existsSync(envPath)) {
     }
     process.env[key] = val;
   }
+}
+
+// Initialize Firebase
+const firebaseConfig = {
+  apiKey: process.env.VITE_FIREBASE_API_KEY || "AIzaSyDQxlxgipnT0OgVY_kxNL7opnMX9VTfEM8",
+  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || "mobus-6aaa9.firebaseapp.com",
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID || "mobus-6aaa9",
+  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "mobus-6aaa9.firebasestorage.app",
+  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "451827926532",
+  appId: process.env.VITE_FIREBASE_APP_ID || "1:451827926532:web:ecca071a400d5650299751"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const activeFirestoreListeners = new Map();
+const processingTokens = new Set(); // Prevent double trigger
+
+function subscribeToSessionFirestore(sessionId) {
+  if (activeFirestoreListeners.has(sessionId)) return;
+
+  console.log(`[Bridge] Subscribing to Firestore updates for session: ${sessionId}`);
+  const tokensRef = collection(db, "sessions", sessionId, "tokens");
+  const unsubscribe = onSnapshot(tokensRef, (snapshot) => {
+    snapshot.docChanges().forEach((change) => {
+      if (change.type === "added" || change.type === "modified") {
+        const tokenId = change.doc.id;
+        const data = change.doc.data();
+        
+        if (data.status === "pending_classification" && !processingTokens.has(tokenId)) {
+          console.log(`[Bridge] Firestore change detected: token ${tokenId} in session ${sessionId} is pending classification.`);
+          processingTokens.add(tokenId);
+          
+          const text = data.title || data.text || "";
+          const description = data.description || "";
+          
+          classifyAndSaveToken(sessionId, tokenId, text, description)
+            .catch(err => {
+              console.error(`[Bridge] Firestore auto-classification failed for token ${tokenId}:`, err);
+            })
+            .finally(() => {
+              processingTokens.delete(tokenId);
+            });
+        }
+      }
+    });
+  }, (err) => {
+    console.error(`[Bridge] Firestore subscription failed for session ${sessionId}:`, err);
+  });
+
+  activeFirestoreListeners.set(sessionId, unsubscribe);
 }
 
 const PORT = 8787;
@@ -112,12 +165,19 @@ async function saveTokenUpdate(sessionId, tokenId, updateFields) {
   session.set(tokenId, { ...existing, ...updateFields });
   broadcast(sessionId);
 
-  // 2. Update in Firestore via REST (optional/fallback)
+  // 2. Update in Firestore via SDK
   try {
-    await updateFirestoreToken(sessionId, tokenId, updateFields);
-    console.log(`[Bridge] Successfully synced token ${tokenId} classification to Firestore`);
+    const docRef = doc(db, "sessions", sessionId, "tokens", tokenId);
+    await updateDoc(docRef, updateFields);
+    console.log(`[Bridge] Successfully synced token ${tokenId} classification to Firestore via SDK`);
   } catch (e) {
-    console.error(`[Bridge] Could not update Firestore for token ${tokenId} via REST:`, e.message);
+    console.error(`[Bridge] Could not update Firestore for token ${tokenId} via SDK:`, e.message);
+    // fallback to REST
+    try {
+      await updateFirestoreToken(sessionId, tokenId, updateFields);
+    } catch (restErr) {
+      console.error(`[Bridge] REST fallback also failed for ${tokenId}:`, restErr.message);
+    }
   }
 }
 
@@ -278,6 +338,7 @@ const server = http.createServer(async (req, res) => {
   if (isClassify) {
     const sId = parts[sessionsIdx + 1];
     const tId = parts[sessionsIdx + 3];
+    subscribeToSessionFirestore(sId);
     
     let body;
     try {
@@ -306,6 +367,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (resource === "events" && req.method === "GET") {
+    subscribeToSessionFirestore(sessionId);
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -325,6 +387,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (resource === "tokens" && tokenId && (req.method === "PUT" || req.method === "PATCH")) {
+    subscribeToSessionFirestore(sessionId);
     const session = getSession(sessionId);
     const existing = session.get(tokenId) || {};
     const body = await readBody(req);
