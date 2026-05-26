@@ -3,11 +3,11 @@ import { BrowserRouter, Routes, Route, useNavigate } from 'react-router';
 import { TokenProvider, useTokens } from './contexts/TokenContext';
 import { TokenClusteringCanvas } from './components/TokenClusteringCanvas';
 import { SystemInsights } from './components/SystemInsights';
-import { IdeaGarden } from './components/IdeaGarden';
 import { Dashboard } from './components/Dashboard';
 import { Landing } from './components/Landing';
 import { PhoneApp } from './components/PhoneApp';
 import { ExperienceInfo } from './components/ExperienceInfo';
+import { DebugView } from './components/DebugView';
 
 const createSessionId = () => `mobus-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -61,10 +61,10 @@ export default function App() {
             <Route path="/dashboard" element={<DashboardWrapper />} />
             <Route path="/dev/wall" element={<SystemInsights />} />
             <Route path="/table" element={<TokenClusteringCanvas />} />
-            <Route path="/input" element={<IdeaGarden />} />
             <Route path="/phone" element={<PhoneApp />} />
             <Route path="/phone/admin" element={<PhoneApp />} />
             <Route path="/phone/session" element={<PhoneApp />} />
+            <Route path="/dev/debug" element={<DebugView />} />
           </Routes>
         </div>
       </TokenProvider>

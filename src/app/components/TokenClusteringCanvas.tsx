@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type MouseEvent as ReactMouseEvent } from 'react';
+import { useState, useRef, useEffect, useMemo, type MouseEvent as ReactMouseEvent } from 'react';
 import { Token } from './Token';
 import { useTokens } from '../contexts/TokenContext';
 import { Card, CardContent } from './ui/card';
@@ -188,7 +188,9 @@ export function TokenClusteringCanvas() {
     loading,
     backendConnected,
     sessionId,
-    addToken
+    addToken,
+    activeRelation,
+    setActiveRelation
   } = useTokens();
 
   const [canvasTokens, setCanvasTokens] = useState<CanvasToken[]>([]);
@@ -227,18 +229,33 @@ export function TokenClusteringCanvas() {
   const isFirstRender = useRef(true);
   const [archiveCandidateId, setArchiveCandidateId] = useState<string | null>(null);
   const [archiveFeedback, setArchiveFeedback] = useState<string | null>(null);
+  const pendingTokenPersistRef = useRef<Record<string, {
+    position?: { x: number; y: number };
+    rotation?: number;
+    scale?: number;
+  }>>({});
+  const persistTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const getDistance = (x1: number, y1: number, x2: number, y2: number) => {
     return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
   };
+
+  const clusterableCanvasTokens = useMemo(() => {
+    return canvasTokens.filter(t => {
+      if (t.ai_metadata) {
+        return t.ai_metadata.is_usable_idea !== false && t.ai_metadata.should_cluster !== false;
+      }
+      return true;
+    });
+  }, [canvasTokens]);
 
   const getConnections = () => {
     const connections: Array<{ from: string; to: string; distance: number }> = [];
     const proximityLines: Array<{ from: string; to: string; distance: number }> = [];
     const connectedTokenIds = new Set<string>();
 
-    canvasTokens.forEach((token, i) => {
-      canvasTokens.slice(i + 1).forEach((otherToken) => {
+    clusterableCanvasTokens.forEach((token, i) => {
+      clusterableCanvasTokens.slice(i + 1).forEach((otherToken) => {
         const distance = getDistance(token.x, token.y, otherToken.x, otherToken.y);
         if (distance < SNAP_DISTANCE) {
           connections.push({ from: token.id, to: otherToken.id, distance });
@@ -447,12 +464,14 @@ export function TokenClusteringCanvas() {
         id: dbToken.id,
         x: existing?.x ?? (dbToken.position.x || (300 + Math.random() * 400)),
         y: existing?.y ?? (dbToken.position.y ? Math.max(dbToken.position.y, TOP_RESTRICTED_AREA + 50) : defaultY),
-        label: dbToken.text,
+        label: dbToken.ai_metadata?.title || dbToken.text,
         description: dbToken.description || '',
         drawingDataUrl: dbToken.drawingDataUrl || null,
-        rotation: dbToken.rotation ?? existing?.rotation ?? 0,
-        scale: existing?.scale ?? 1,
+        rotation: existing?.rotation ?? dbToken.rotation ?? 0,
+        scale: existing?.scale ?? dbToken.scale ?? 1,
         lastInteracted: existing?.lastInteracted ?? Date.now(),
+        status: dbToken.status || "active",
+        ai_metadata: dbToken.ai_metadata || null,
       };
     });
 
@@ -493,10 +512,10 @@ export function TokenClusteringCanvas() {
     const activeList: Array<{ id: string; sourceId: string; targetId: string; score: number }> = [];
 
     // Pairwise comparison of all canvas tokens
-    for (let i = 0; i < canvasTokens.length; i++) {
-      for (let j = i + 1; j < canvasTokens.length; j++) {
-        const t1 = canvasTokens[i];
-        const t2 = canvasTokens[j];
+    for (let i = 0; i < clusterableCanvasTokens.length; i++) {
+      for (let j = i + 1; j < clusterableCanvasTokens.length; j++) {
+        const t1 = clusterableCanvasTokens[i];
+        const t2 = clusterableCanvasTokens[j];
 
         const d = getDistance(t1.x, t1.y, t2.x, t2.y);
         // Suggested lines disappear if they get snapped (d < SNAP_DISTANCE) or if they are dragged too far (d > 380)
@@ -518,23 +537,41 @@ export function TokenClusteringCanvas() {
     const top3 = activeList.sort((a, b) => b.score - a.score).slice(0, 3);
     const top3Ids = new Set(top3.map(s => s.id));
 
+    if (activeRelation) {
+      const stillValid = top3.some(s => 
+        (s.sourceId === activeRelation.sourceId && s.targetId === activeRelation.targetId) ||
+        (s.sourceId === activeRelation.targetId && s.targetId === activeRelation.sourceId)
+      );
+      if (!stillValid) {
+        setActiveRelation(null);
+      }
+    }
+
     setSuggestionLines(prev => {
       const updated = [...prev];
+      let changed = false;
 
       // Update existing entries and mark leaving entries
       updated.forEach(line => {
         if (top3Ids.has(line.id)) {
           const match = top3.find(s => s.id === line.id)!;
-          line.score = match.score;
-          line.isLeaving = false;
+          if (line.score !== match.score || line.isLeaving) {
+            line.score = match.score;
+            line.isLeaving = false;
+            changed = true;
+          }
         } else {
-          line.isLeaving = true;
+          if (!line.isLeaving) {
+            line.isLeaving = true;
+            changed = true;
+          }
         }
       });
 
       // Add new entries
       top3.forEach(line => {
         if (!updated.some(l => l.id === line.id)) {
+          changed = true;
           updated.push({
             id: line.id,
             sourceId: line.sourceId,
@@ -546,9 +583,9 @@ export function TokenClusteringCanvas() {
         }
       });
 
-      return updated;
+      return changed ? updated : prev;
     });
-  }, [canvasTokens, connections]);
+  }, [canvasTokens, activeRelation]);
 
   // Animating tick loop for smooth opacity transitions
   useEffect(() => {
@@ -731,6 +768,52 @@ export function TokenClusteringCanvas() {
     );
   };
 
+  const flushTokenPersist = (id: string) => {
+    const pending = pendingTokenPersistRef.current[id];
+    if (!pending) return;
+
+    const timer = persistTimersRef.current[id];
+    if (timer) {
+      clearTimeout(timer);
+      delete persistTimersRef.current[id];
+    }
+    delete pendingTokenPersistRef.current[id];
+
+    if (pending.position) {
+      updateTokenPosition(id, pending.position);
+    }
+    if (typeof pending.rotation === 'number') {
+      updateTokenRotation(id, pending.rotation);
+    }
+    if (typeof pending.scale === 'number') {
+      updateTokenScale(id, pending.scale);
+    }
+  };
+
+  const scheduleTokenPersist = (
+    id: string,
+    patch: {
+      position?: { x: number; y: number };
+      rotation?: number;
+      scale?: number;
+    }
+  ) => {
+    pendingTokenPersistRef.current[id] = {
+      ...pendingTokenPersistRef.current[id],
+      ...patch,
+    };
+
+    if (persistTimersRef.current[id]) return;
+    persistTimersRef.current[id] = setTimeout(() => flushTokenPersist(id), 100);
+  };
+
+  useEffect(() => {
+    return () => {
+      Object.values(persistTimersRef.current).forEach(clearTimeout);
+      Object.keys(pendingTokenPersistRef.current).forEach(flushTokenPersist);
+    };
+  }, []);
+
   const handleMove = (id: string, newX: number, newY: number) => {
     setAiPrompt(null); // Clear active prompts on move
     setSelectedRelationKey(null);
@@ -745,7 +828,7 @@ export function TokenClusteringCanvas() {
       return updated;
     });
 
-    updateTokenPosition(id, { x: newX, y: constrainedY });
+    scheduleTokenPersist(id, { position: { x: newX, y: constrainedY } });
   };
 
   const handleRotate = (id: string, rotation: number) => {
@@ -760,7 +843,7 @@ export function TokenClusteringCanvas() {
       return updated;
     });
 
-    updateTokenRotation(id, rotation);
+    scheduleTokenPersist(id, { rotation });
   };
 
   const handleScale = (id: string, scale: number) => {
@@ -775,7 +858,7 @@ export function TokenClusteringCanvas() {
       return updated;
     });
 
-    updateTokenScale(id, scale);
+    scheduleTokenPersist(id, { scale });
   };
 
 
@@ -783,6 +866,7 @@ export function TokenClusteringCanvas() {
 
 
   const handleTokenRelease = async (id: string, x: number, y: number) => {
+    flushTokenPersist(id);
     const shouldArchive = isInArchiveZone(x, y);
     setArchiveCandidateId(null);
 
@@ -834,6 +918,7 @@ export function TokenClusteringCanvas() {
     if (e.target === e.currentTarget) {
       setSelectedTokenId(null);
       setSelectedRelationKey(null);
+      setActiveRelation(null);
     }
   };
 
@@ -953,7 +1038,13 @@ export function TokenClusteringCanvas() {
             const d = getDistance(token1.x, token1.y, token2.x, token2.y);
             // Linear fade out as tokens are pulled apart (between 140px and 380px)
             const distanceFade = Math.max(0, Math.min(1, 1 - (d - 140) / (380 - 140)));
-            const opacity = line.currentOpacity * distanceFade * line.score * 0.35;
+            
+            const isActive = activeRelation && (
+              (activeRelation.sourceId === line.sourceId && activeRelation.targetId === line.targetId) ||
+              (activeRelation.sourceId === line.targetId && activeRelation.targetId === line.sourceId)
+            );
+
+            const opacity = isActive ? 0.9 : (line.currentOpacity * distanceFade * line.score * 0.35);
 
             if (opacity < 0.01) return null;
 
@@ -964,15 +1055,32 @@ export function TokenClusteringCanvas() {
                 style={{
                   opacity,
                   transition: 'opacity 0.2s ease-out',
+                  pointerEvents: 'auto',
                 }}
               >
+                {/* Thick invisible click target */}
                 <line
                   x1={token1.x}
                   y1={token1.y}
                   x2={token2.x}
                   y2={token2.y}
-                  stroke="#10b981"
-                  strokeWidth="1.5"
+                  stroke="transparent"
+                  strokeWidth="24"
+                  className="cursor-pointer"
+                  style={{ pointerEvents: 'auto' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveRelation({ sourceId: line.sourceId, targetId: line.targetId });
+                  }}
+                />
+                {/* Visible suggested line */}
+                <line
+                  x1={token1.x}
+                  y1={token1.y}
+                  x2={token2.x}
+                  y2={token2.y}
+                  stroke={isActive ? "#34d399" : "#10b981"}
+                  strokeWidth={isActive ? "2.2" : "1.5"}
                   strokeDasharray="4,3"
                   style={{
                     filter: 'url(#subtle-glow)',
@@ -1222,6 +1330,8 @@ export function TokenClusteringCanvas() {
                 setAiPrompt(null);
               }}
               isDimmed={isTokenDimmed(token.id)}
+              status={token.status}
+              ai_metadata={token.ai_metadata}
             />
           );
         })}

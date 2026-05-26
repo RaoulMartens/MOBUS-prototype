@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { db, isConfigured } from "../../firebase";
+import { db, firebaseConfig, isConfigured } from "../../firebase";
 import {
   collection,
   doc,
@@ -8,6 +8,7 @@ import {
   onSnapshot,
   serverTimestamp
 } from "firebase/firestore";
+import { saveTokenToLocalBridge } from "../utils/localBridge";
 import {
   Sparkles,
   CheckCircle2,
@@ -38,6 +39,56 @@ const getDrawingDataUrl = (data: any): string | null => {
 
 const isParkedIdea = (data: any): boolean => {
   return data?.archived === true || data?.parked === true || data?.status === "archived";
+};
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
+const toFirestoreFields = (value: any): any => {
+  if (value === null || value === undefined) return { nullValue: null };
+  if (typeof value === "string") return { stringValue: value };
+  if (typeof value === "number") return Number.isInteger(value) ? { integerValue: value } : { doubleValue: value };
+  if (typeof value === "boolean") return { booleanValue: value };
+  if (value instanceof Date) return { timestampValue: value.toISOString() };
+  if (Array.isArray(value)) return { arrayValue: { values: value.map(toFirestoreFields) } };
+  return {
+    mapValue: {
+      fields: Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [key, toFirestoreFields(item)])
+      ),
+    },
+  };
+};
+
+const setDocViaRest = async (path: string, payload: Record<string, any>) => {
+  const projectId = firebaseConfig.projectId;
+  const apiKey = firebaseConfig.apiKey;
+  const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${encodedPath}?key=${apiKey}`;
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fields: Object.fromEntries(
+        Object.entries(payload).map(([key, value]) => [key, toFirestoreFields(value)])
+      ),
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`REST write failed (${response.status}): ${message}`);
+  }
 };
 
 const normalizeSessionId = (value: string): string => {
@@ -605,7 +656,8 @@ export function PhoneApp() {
     try {
       const docRef = doc(db, "sessions", sessionId, "tokens", newSeedId);
       const num = seedNum(newSeedId);
-      await setDoc(docRef, {
+      const now = new Date();
+      const payload = {
         id: newSeedId,
         tokenId: newSeedId,
         seedId: newSeedId,
@@ -614,7 +666,7 @@ export function PhoneApp() {
         description: ideaDescription.trim(),
         drawingDataUrl: currentSketchDataUrl || null,
         sketch: currentSketchDataUrl || null,
-        status: "active",
+        status: "pending_classification",
         archived: false,
         source: "phone",
         cluster: null,
@@ -624,7 +676,53 @@ export function PhoneApp() {
         priority: null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-      });
+      };
+      try {
+        // Concurrently write to local bridge
+        try {
+          await saveTokenToLocalBridge(sessionId, newSeedId, {
+            ...payload,
+            createdAt: now.toISOString(),
+            updatedAt: now.toISOString()
+          });
+        } catch (bridgeErr) {
+          console.warn("Failed to write to local bridge from PhoneApp:", bridgeErr);
+        }
+        await withTimeout(setDoc(docRef, payload), 4000, "Firestore SDK timeout");
+      } catch (sdkError) {
+        console.warn("Firestore SDK write timed out; trying REST fallback:", sdkError);
+        try {
+          await withTimeout(
+            setDocViaRest(`sessions/${sessionId}/tokens/${newSeedId}`, {
+              ...payload,
+              createdAt: now,
+              updatedAt: now,
+            }),
+            8000,
+            "REST write timeout"
+          );
+        } catch (restError) {
+          console.warn("Firestore REST write failed; trying local bridge:", restError);
+          await withTimeout(
+            saveTokenToLocalBridge(sessionId, newSeedId, {
+              ...payload,
+              createdAt: now.toISOString(),
+              updatedAt: now.toISOString(),
+            }),
+            4000,
+            "Opslaan duurt te lang. Controleer wifi/internet en probeer opnieuw."
+          );
+        }
+      }
+
+      // Trigger classification asynchronously
+      const bridgeUrl = `http://${window.location.hostname}:8787`;
+      fetch(`${bridgeUrl}/api/sessions/${encodeURIComponent(sessionId)}/tokens/${encodeURIComponent(newSeedId)}/classify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: ideaTitle.trim(), description: ideaDescription.trim() }),
+      }).catch(err => console.error("[Phone] Failed to start classification:", err));
+
       setUserWizardStep("success");
     } catch (err: any) {
       console.error("Save failed:", err);
@@ -702,7 +800,7 @@ export function PhoneApp() {
         description: formDescription.trim(),
         drawingDataUrl: formSketch,
         sketch: formSketch,
-        status: formStatus,
+        status: formStatus === "archived" ? "archived" : "pending_classification",
         archived: formStatus === "archived",
         source: "admin",
         updatedAt: serverTimestamp()
@@ -716,7 +814,29 @@ export function PhoneApp() {
         payload.priority = null;
       }
 
+      // Concurrently write to local bridge
+      try {
+        await saveTokenToLocalBridge(sessionId, targetId, {
+          ...existing,
+          ...payload,
+          createdAt: existing?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      } catch (bridgeErr) {
+        console.warn("Failed to write to local bridge in admin PhoneApp:", bridgeErr);
+      }
+
       await setDoc(docRef, payload, { merge: true });
+
+      if (formStatus !== "archived") {
+        const bridgeUrl = `http://${window.location.hostname}:8787`;
+        fetch(`${bridgeUrl}/api/sessions/${encodeURIComponent(sessionId)}/tokens/${encodeURIComponent(targetId)}/classify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: formTitle.trim(), description: formDescription.trim() }),
+        }).catch(err => console.error("[Phone Admin] Failed to start classification:", err));
+      }
+
       setAdminSuccess(
         isEditing
           ? `Idee "${formTitle.trim()}" bijgewerkt.`

@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore } from "firebase/firestore";
 
 // ==========================================
 // FIREBASE CONFIGURATION
@@ -53,7 +53,10 @@ if (!isConfigured) {
 // Initialize Firebase
 const app = initializeApp(config);
 
-// Initialize Firestore
-const db = getFirestore(app);
+// Initialize Firestore. Long-poll auto-detection avoids mobile/LAN networks
+// where the default WebChannel transport can hang while writing.
+const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+});
 
-export { db, isConfigured };
+export { db, isConfigured, config as firebaseConfig };

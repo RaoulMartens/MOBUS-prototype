@@ -1,14 +1,16 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { db } from '../../firebase';
 import {
   collection,
   doc,
   setDoc,
+  updateDoc,
   deleteDoc,
   onSnapshot,
   getDocs,
   writeBatch
 } from 'firebase/firestore';
+import { subscribeLocalBridge, updateLocalBridgeToken, classifyTokenOnBridge, saveTokenToLocalBridge } from '../utils/localBridge';
 
 export interface Token {
   id: string;
@@ -21,6 +23,22 @@ export interface Token {
   rotation: number;
   scale: number;
   createdAt: string;
+  status?: string;
+  ai_metadata?: {
+    is_usable_idea?: boolean;
+    validation_status?: "valid" | "too_vague" | "too_short" | "off_topic" | "not_an_idea";
+    user_friendly_feedback?: string;
+    title: string;
+    summary: string;
+    category: string;
+    perspective: string;
+    tags: string[];
+    confidence: number;
+    should_cluster?: boolean;
+    cluster_name?: string | null;
+    creative_intent: string;
+    possible_connections: string[];
+  } | null;
 }
 
 export interface Cluster {
@@ -44,6 +62,8 @@ interface TokenContextType {
   loading: boolean;
   backendConnected: boolean;
   sessionId: string;
+  activeRelation: { sourceId: string; targetId: string } | null;
+  setActiveRelation: (relation: { sourceId: string; targetId: string } | null) => Promise<void>;
   updateSessionId: (id: string) => void;
   addToken: (text: string, position: { x: number; y: number }, description?: string) => Promise<void>;
   updateTokenPosition: (id: string, position: { x: number; y: number }) => Promise<void>;
@@ -81,6 +101,36 @@ const getSessionId = (): string => {
   return "mobus-tafel-88"; // default matching simulated scanner
 };
 
+const normalizeToken = (id: string, data: any): Token | null => {
+  if (data.status === "archived" || data.archived === true) return null;
+  const text = data.title || data.text || "";
+  if (!text.trim()) return null;
+
+  return {
+    id,
+    text,
+    description: data.description || "",
+    drawingDataUrl: data.drawingDataUrl || data.sketch || null,
+    drawingPath: data.drawingPath || null,
+    clusterId: data.clusterId !== undefined ? data.clusterId : (data.cluster || null),
+    position: data.position && typeof data.position.x === 'number' && typeof data.position.y === 'number'
+      ? { x: data.position.x, y: data.position.y }
+      : { x: 300 + Math.random() * 400, y: 200 + Math.random() * 300 },
+    rotation: typeof data.rotation === 'number' ? data.rotation : 0,
+    scale: typeof data.scale === 'number' ? data.scale : 1,
+    createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || new Date().toISOString(),
+    status: data.status || "active",
+    ai_metadata: data.ai_metadata || null,
+  };
+};
+
+const mergeTokens = (firestoreTokens: Token[], bridgeTokens: Token[]) => {
+  const merged = new Map<string, Token>();
+  firestoreTokens.forEach(token => merged.set(token.id, token));
+  bridgeTokens.forEach(token => merged.set(token.id, token));
+  return Array.from(merged.values());
+};
+
 export function TokenProvider({ children }: { children: ReactNode }) {
   const [tokens, setTokens] = useState<Token[]>([]);
   const [clusters, setClusters] = useState<Cluster[]>([]);
@@ -88,6 +138,9 @@ export function TokenProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [backendConnected, setBackendConnected] = useState(false);
   const [sessionId, setSessionId] = useState(() => getSessionId());
+  const [activeRelation, setActiveRelationState] = useState<{ sourceId: string; targetId: string } | null>(null);
+  const firestoreTokensRef = useRef<Token[]>([]);
+  const bridgeTokensRef = useRef<Token[]>([]);
 
   const updateSessionId = (id: string) => {
     const normalized = normalizeSessionId(id);
@@ -108,28 +161,16 @@ export function TokenProvider({ children }: { children: ReactNode }) {
         const fetchedTokens: Token[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
-          if (data.status === "archived" || data.archived === true) return;
-
-          fetchedTokens.push({
-            id: docSnap.id,
-            text: data.title || data.text || "",
-            description: data.description || "",
-            drawingDataUrl: data.drawingDataUrl || data.sketch || null,
-            drawingPath: data.drawingPath || null,
-            clusterId: data.clusterId !== undefined ? data.clusterId : (data.cluster || null),
-            position: data.position && typeof data.position.x === 'number' && typeof data.position.y === 'number'
-              ? { x: data.position.x, y: data.position.y }
-              : { x: 300 + Math.random() * 400, y: 200 + Math.random() * 300 },
-            rotation: typeof data.rotation === 'number' ? data.rotation : 0,
-            scale: typeof data.scale === 'number' ? data.scale : 1,
-            createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || new Date().toISOString(),
-          });
+          const token = normalizeToken(docSnap.id, data);
+          if (token) fetchedTokens.push(token);
         });
 
-        setTokens(fetchedTokens);
+        firestoreTokensRef.current = fetchedTokens;
+        const mergedTokens = mergeTokens(fetchedTokens, bridgeTokensRef.current);
+        setTokens(mergedTokens);
         setBackendConnected(true);
         setLoading(false);
-        localStorage.setItem("tokens", JSON.stringify(fetchedTokens));
+        localStorage.setItem("tokens", JSON.stringify(mergedTokens));
       },
       (error) => {
         console.error("Firestore tokens sync error:", error);
@@ -193,10 +234,44 @@ export function TokenProvider({ children }: { children: ReactNode }) {
       }
     );
 
+    // 4. Subscribe to active relation state
+    const activeRelationRef = doc(db, "sessions", sessionId, "state", "activeRelation");
+    const unsubscribeActiveRelation = onSnapshot(
+      activeRelationRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          if (data.sourceId && data.targetId) {
+            setActiveRelationState({ sourceId: data.sourceId, targetId: data.targetId });
+          } else {
+            setActiveRelationState(null);
+          }
+        } else {
+          setActiveRelationState(null);
+        }
+      },
+      (error) => {
+        console.error("Firestore active relation sync error:", error);
+      }
+    );
+
+    const unsubscribeLocalBridge = subscribeLocalBridge(sessionId, (items) => {
+      const localTokens = items
+        .map(({ id, data }) => normalizeToken(id, data))
+        .filter((token): token is Token => token !== null);
+      bridgeTokensRef.current = localTokens;
+      const mergedTokens = mergeTokens(firestoreTokensRef.current, localTokens);
+      setTokens(mergedTokens);
+      setLoading(false);
+      localStorage.setItem("tokens", JSON.stringify(mergedTokens));
+    });
+
     return () => {
       unsubscribeIdeas();
       unsubscribeClusters();
       unsubscribeEvents();
+      unsubscribeActiveRelation();
+      unsubscribeLocalBridge();
     };
   }, [sessionId]);
 
@@ -218,7 +293,7 @@ export function TokenProvider({ children }: { children: ReactNode }) {
       position: position,
       rotation: 0,
       scale: 1,
-      status: "active",
+      status: "pending_classification",
       archived: false,
       source: "table",
       createdAt: new Date().toISOString(),
@@ -226,8 +301,21 @@ export function TokenProvider({ children }: { children: ReactNode }) {
     };
 
     try {
+      // 1. Write to local bridge first
+      try {
+        await saveTokenToLocalBridge(sessionId, tokenId, payload);
+      } catch (bridgeErr) {
+        console.warn("Failed to write to local bridge:", bridgeErr);
+      }
+
+      // 2. Write to Firestore
       await setDoc(docRef, payload);
       await addEvent("created", `New token "${text}" created`);
+      
+      // Trigger classification asynchronously
+      classifyTokenOnBridge(sessionId, tokenId, text, description || "").catch(err => {
+        console.error("Failed to classify token on bridge:", err);
+      });
     } catch (error) {
       console.error("Error adding token:", error);
     }
@@ -235,8 +323,16 @@ export function TokenProvider({ children }: { children: ReactNode }) {
 
   const updateTokenPosition = async (id: string, position: { x: number; y: number }) => {
     const docRef = doc(db, "sessions", sessionId, "tokens", id);
+    const patch = { position, updatedAt: new Date().toISOString() };
+    
     try {
-      await setDoc(docRef, { position, updatedAt: new Date().toISOString() }, { merge: true });
+      await updateLocalBridgeToken(sessionId, id, patch);
+    } catch (bridgeError) {
+      console.warn("Error updating local bridge position:", bridgeError);
+    }
+
+    try {
+      await updateDoc(docRef, patch);
     } catch (error) {
       console.error("Error updating token position:", error);
     }
@@ -244,8 +340,16 @@ export function TokenProvider({ children }: { children: ReactNode }) {
 
   const updateTokenRotation = async (id: string, rotation: number) => {
     const docRef = doc(db, "sessions", sessionId, "tokens", id);
+    const patch = { rotation, updatedAt: new Date().toISOString() };
+
     try {
-      await setDoc(docRef, { rotation, updatedAt: new Date().toISOString() }, { merge: true });
+      await updateLocalBridgeToken(sessionId, id, patch);
+    } catch (bridgeError) {
+      console.warn("Error updating local bridge rotation:", bridgeError);
+    }
+
+    try {
+      await updateDoc(docRef, patch);
     } catch (error) {
       console.error("Error updating token rotation:", error);
     }
@@ -253,8 +357,16 @@ export function TokenProvider({ children }: { children: ReactNode }) {
 
   const updateTokenScale = async (id: string, scale: number) => {
     const docRef = doc(db, "sessions", sessionId, "tokens", id);
+    const patch = { scale, updatedAt: new Date().toISOString() };
+
     try {
-      await setDoc(docRef, { scale, updatedAt: new Date().toISOString() }, { merge: true });
+      await updateLocalBridgeToken(sessionId, id, patch);
+    } catch (bridgeError) {
+      console.warn("Error updating local bridge scale:", bridgeError);
+    }
+
+    try {
+      await updateDoc(docRef, patch);
     } catch (error) {
       console.error("Error updating token scale:", error);
     }
@@ -262,8 +374,16 @@ export function TokenProvider({ children }: { children: ReactNode }) {
 
   const updateTokenText = async (id: string, text: string) => {
     const docRef = doc(db, "sessions", sessionId, "tokens", id);
+    const patch = { title: text, text, updatedAt: new Date().toISOString() };
+
     try {
-      await setDoc(docRef, { title: text, text, updatedAt: new Date().toISOString() }, { merge: true });
+      await updateLocalBridgeToken(sessionId, id, patch);
+    } catch (bridgeError) {
+      console.warn("Error updating local bridge text:", bridgeError);
+    }
+
+    try {
+      await setDoc(docRef, patch, { merge: true });
     } catch (error) {
       console.error("Error updating token text:", error);
     }
@@ -271,8 +391,16 @@ export function TokenProvider({ children }: { children: ReactNode }) {
 
   const updateTokenDescription = async (id: string, description: string) => {
     const docRef = doc(db, "sessions", sessionId, "tokens", id);
+    const patch = { description, updatedAt: new Date().toISOString() };
+
     try {
-      await setDoc(docRef, { description, updatedAt: new Date().toISOString() }, { merge: true });
+      await updateLocalBridgeToken(sessionId, id, patch);
+    } catch (bridgeError) {
+      console.warn("Error updating local bridge description:", bridgeError);
+    }
+
+    try {
+      await setDoc(docRef, patch, { merge: true });
     } catch (error) {
       console.error("Error updating token description:", error);
     }
@@ -280,16 +408,24 @@ export function TokenProvider({ children }: { children: ReactNode }) {
 
   const archiveToken = async (id: string) => {
     const docRef = doc(db, "sessions", sessionId, "tokens", id);
+    const token = tokens.find((t) => t.id === id);
+    const label = token?.text || "Unknown";
+    const patch = {
+      archived: true,
+      status: "archived",
+      clusterId: null,
+      cluster: null,
+      updatedAt: new Date().toISOString(),
+    };
+
     try {
-      const token = tokens.find((t) => t.id === id);
-      const label = token?.text || "Unknown";
-      await setDoc(docRef, {
-        archived: true,
-        status: "archived",
-        clusterId: null,
-        cluster: null,
-        updatedAt: new Date().toISOString(),
-      }, { merge: true });
+      await updateLocalBridgeToken(sessionId, id, patch);
+    } catch (bridgeError) {
+      console.warn("Error archiving local bridge token:", bridgeError);
+    }
+
+    try {
+      await setDoc(docRef, patch, { merge: true });
       await addEvent("moved", `Token "${label}" parked outside active table space`);
     } catch (error) {
       console.error("Error archiving token:", error);
@@ -298,9 +434,16 @@ export function TokenProvider({ children }: { children: ReactNode }) {
 
   const deleteToken = async (id: string) => {
     const docRef = doc(db, "sessions", sessionId, "tokens", id);
+    const token = tokens.find((t) => t.id === id);
+    const label = token?.text || "Unknown";
+
     try {
-      const token = tokens.find((t) => t.id === id);
-      const label = token?.text || "Unknown";
+      await updateLocalBridgeToken(sessionId, id, { status: "deleted", archived: true });
+    } catch (bridgeError) {
+      console.warn("Error updating local bridge for deletion:", bridgeError);
+    }
+
+    try {
       await deleteDoc(docRef);
       await addEvent("moved", `Token "${label}" deleted`);
     } catch (error) {
@@ -454,6 +597,27 @@ export function TokenProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const setActiveRelation = async (relation: { sourceId: string; targetId: string } | null) => {
+    const activeRelationRef = doc(db, "sessions", sessionId, "state", "activeRelation");
+    try {
+      if (relation) {
+        await setDoc(activeRelationRef, {
+          sourceId: relation.sourceId,
+          targetId: relation.targetId,
+          updatedAt: new Date().toISOString()
+        });
+      } else {
+        await setDoc(activeRelationRef, {
+          sourceId: null,
+          targetId: null,
+          updatedAt: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error("Error setting active relation:", error);
+    }
+  };
+
   return (
     <TokenContext.Provider
       value={{
@@ -463,6 +627,8 @@ export function TokenProvider({ children }: { children: ReactNode }) {
         loading,
         backendConnected,
         sessionId,
+        activeRelation,
+        setActiveRelation,
         updateSessionId,
         addToken,
         updateTokenPosition,

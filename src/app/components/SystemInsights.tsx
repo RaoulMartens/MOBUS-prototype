@@ -122,6 +122,100 @@ function generateClusterLabel(items: Array<{ text: string; description?: string 
   return `Thema ${index + 1}`;
 }
 
+interface Explanation {
+  reasons: string[];
+  question: string;
+}
+
+function generateRelationExplanation(tokenA: { text: string; description?: string }, tokenB: { text: string; description?: string }): Explanation {
+  const wordsA = normalizeWords(`${tokenA.text} ${tokenA.description || ''}`);
+  const wordsB = normalizeWords(`${tokenB.text} ${tokenB.description || ''}`);
+  
+  const setA = new Set(wordsA);
+  const setB = new Set(wordsB);
+  
+  // Find shared keywords
+  const sharedKeywords: string[] = [];
+  setA.forEach(w => {
+    if (setB.has(w) && w.length > 3) {
+      sharedKeywords.push(w);
+    }
+  });
+
+  // Find matching themes for both
+  const matchedThemes: string[] = [];
+  THEME_RULES.forEach(theme => {
+    const hasA = theme.keywords.some(kw => 
+      wordsA.some(w => w.includes(kw) || kw.includes(w))
+    );
+    const hasB = theme.keywords.some(kw => 
+      wordsB.some(w => w.includes(kw) || kw.includes(w))
+    );
+    if (hasA && hasB) {
+      matchedThemes.push(theme.label);
+    }
+  });
+
+  const reasons: string[] = [];
+
+  // Theme-based reasons
+  if (matchedThemes.length > 0) {
+    reasons.push(`ze allebei aansluiten bij het thema **${matchedThemes[0]}**`);
+  } else if (sharedKeywords.length > 0) {
+    reasons.push(`ze beide praten over onderwerpen rondom **"${sharedKeywords.slice(0, 2).map(toTitleCase).join(' & ')}"**`);
+  } else {
+    reasons.push(`ze een gemeenschappelijke ondergrond lijken te hebben in jullie sessie`);
+  }
+
+  // Phase/Implementation reason
+  const cleanA = tokenA.text.toLowerCase() + ' ' + (tokenA.description || '').toLowerCase();
+  const cleanB = tokenB.text.toLowerCase() + ' ' + (tokenB.description || '').toLowerCase();
+
+  const isTechA = cleanA.includes('ai') || cleanA.includes('robot') || cleanA.includes('techno') || cleanA.includes('systeem') || cleanA.includes('digitaal') || cleanA.includes('data') || cleanA.includes('computer');
+  const isTechB = cleanB.includes('ai') || cleanB.includes('robot') || cleanB.includes('techno') || cleanB.includes('systeem') || cleanB.includes('digitaal') || cleanB.includes('data') || cleanB.includes('computer');
+
+  const isHumanA = cleanA.includes('mens') || cleanA.includes('team') || cleanA.includes('crea') || cleanA.includes('burger') || cleanA.includes('samen') || cleanA.includes('sociaal') || cleanA.includes('gevoel') || cleanA.includes('ethiek');
+  const isHumanB = cleanB.includes('mens') || cleanB.includes('team') || cleanB.includes('crea') || cleanB.includes('burger') || cleanB.includes('samen') || cleanB.includes('sociaal') || cleanB.includes('gevoel') || cleanB.includes('ethiek');
+
+  if ((isTechA && isHumanB) || (isTechB && isHumanA)) {
+    reasons.push(`het ene idee de technische mogelijkheden verkent, terwijl het andere juist de menselijke of sociale factor centraal stelt`);
+  } else if (cleanA.includes('praktisch') || cleanA.includes('doen') || cleanB.includes('praktisch') || cleanB.includes('doen') || cleanA.includes('concrete') || cleanB.includes('concrete')) {
+    reasons.push(`ze een interessante spanning laten zien tussen een concrete, praktische aanpak en een meer conceptueel idee`);
+  } else {
+    reasons.push(`ze elkaar aanvullen in hoe ze de sessie vormgeven`);
+  }
+
+  // 3rd reason: creative facilitator nudge
+  if (matchedThemes.length > 1) {
+    reasons.push(`ze ook raken aan aspecten van **${matchedThemes[1]}**`);
+  } else {
+    reasons.push(`ze samen een bredere oplossingsrichting lijken te openen`);
+  }
+
+  // Creative question
+  let question = `Wat gebeurt er als je "${tokenA.text}" combineert met "${tokenB.text}"?`;
+  if (matchedThemes.includes('Mensgerichte Technologie')) {
+    question = `Hoe kunnen de technologie in "${tokenA.text}" en de menselijke maat in "${tokenB.text}" elkaar versterken?`;
+  } else if (matchedThemes.includes('Veilige en Eerlijke Keuzes')) {
+    question = `Welke morele of ethische grens moeten we bewaken als we "${tokenA.text}" en "${tokenB.text}" samenbrengen?`;
+  } else if (matchedThemes.includes('Samenwerking en Eigenaarschap')) {
+    question = `Wie zou de kartrekker moeten zijn als we "${tokenA.text}" en "${tokenB.text}" als één geheel oppakken?`;
+  } else if (matchedThemes.includes('Duurzame Impact')) {
+    question = `Wat voor positieve impact op de lange termijn ontstaat er als we "${tokenA.text}" koppelen aan "${tokenB.text}"?`;
+  } else if ((isTechA && isHumanB) || (isTechB && isHumanA)) {
+    question = `Hoe zorgt de menselijke factor ervoor dat het technische systeem van deze ideeën betrouwbaar en prettig blijft?`;
+  }
+
+  return { reasons: reasons.slice(0, 3), question };
+}
+
+function renderReason(reason: string) {
+  const parts = reason.split(/\*\*(.*?)\*\*/g);
+  return parts.map((part, i) => 
+    i % 2 === 1 ? <strong key={i} style={{ fontWeight: 700, color: '#09090b' }}>{part}</strong> : part
+  );
+}
+
 interface ClusterCardIdea {
   text: string;
   drawingDataUrl: string | null;
@@ -134,9 +228,18 @@ interface ClusterCard {
 }
 
 export function SystemInsights() {
-  const { tokens, loading, sessionId } = useTokens();
+  const { tokens, loading, sessionId, activeRelation } = useTokens();
   const [isThinking, setIsThinking] = useState(false);
   const prevTokensSignature = useRef('');
+
+  const clusterableTokens = useMemo(() => {
+    return tokens.filter(t => {
+      if (t.ai_metadata) {
+        return t.ai_metadata.is_usable_idea !== false && t.ai_metadata.should_cluster !== false;
+      }
+      return true; // if pending, keep for now
+    });
+  }, [tokens]);
 
   useEffect(() => {
     document.title = "MOBUS - Wandscherm";
@@ -162,7 +265,7 @@ export function SystemInsights() {
   }, []);
 
   const clusterCards = useMemo<ClusterCard[]>(() => {
-    if (tokens.length === 0) return [];
+    if (clusterableTokens.length === 0) return [];
 
     // ── Proximity clustering (same logic as before) ──
     const SNAP_DISTANCE = 140;
@@ -170,13 +273,13 @@ export function SystemInsights() {
       Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
 
     const adj: Record<string, string[]> = {};
-    tokens.forEach(t => { adj[t.id] = []; });
+    clusterableTokens.forEach(t => { adj[t.id] = []; });
 
-    for (let i = 0; i < tokens.length; i++) {
-      for (let j = i + 1; j < tokens.length; j++) {
-        if (dist(tokens[i].position, tokens[j].position) < SNAP_DISTANCE) {
-          adj[tokens[i].id].push(tokens[j].id);
-          adj[tokens[j].id].push(tokens[i].id);
+    for (let i = 0; i < clusterableTokens.length; i++) {
+      for (let j = i + 1; j < clusterableTokens.length; j++) {
+        if (dist(clusterableTokens[i].position, clusterableTokens[j].position) < SNAP_DISTANCE) {
+          adj[clusterableTokens[i].id].push(clusterableTokens[j].id);
+          adj[clusterableTokens[j].id].push(clusterableTokens[i].id);
         }
       }
     }
@@ -185,14 +288,14 @@ export function SystemInsights() {
     const visited = new Set<string>();
     const components: typeof tokens[] = [];
 
-    tokens.forEach(t => {
+    clusterableTokens.forEach(t => {
       if (visited.has(t.id)) return;
       const comp: typeof tokens = [];
       const queue = [t.id];
       visited.add(t.id);
       while (queue.length > 0) {
         const cid = queue.shift()!;
-        const tk = tokens.find(x => x.id === cid);
+        const tk = clusterableTokens.find(x => x.id === cid);
         if (tk) comp.push(tk);
         adj[cid].forEach(nid => {
           if (!visited.has(nid)) { visited.add(nid); queue.push(nid); }
@@ -207,7 +310,15 @@ export function SystemInsights() {
         text: t.text,
         drawingDataUrl: t.drawingDataUrl || null,
       }));
-      const label = generateClusterLabel(comp, idx);
+      
+      let label = "";
+      const validClusterName = comp.find(t => t.ai_metadata?.cluster_name && t.ai_metadata.cluster_name !== "null" && t.ai_metadata.cluster_name !== "none")?.ai_metadata?.cluster_name;
+      if (validClusterName) {
+        label = validClusterName;
+      } else {
+        label = generateClusterLabel(comp, idx);
+      }
+
       const suggestion = comp.length >= 3
         ? pickSuggestion(SUGGESTIONS_3PLUS, idx)
         : comp.length >= 2
@@ -216,7 +327,7 @@ export function SystemInsights() {
 
       return { label, ideas, suggestion };
     });
-  }, [tokens]);
+  }, [clusterableTokens]);
 
   if (loading) {
     return (
@@ -224,6 +335,92 @@ export function SystemInsights() {
         <span style={styles.loadingText}>Laden...</span>
       </div>
     );
+  }
+
+  if (activeRelation) {
+    const tokenA = tokens.find(t => t.id === activeRelation.sourceId);
+    const tokenB = tokens.find(t => t.id === activeRelation.targetId);
+
+    if (tokenA && tokenB) {
+      const explanation = generateRelationExplanation(tokenA, tokenB);
+
+      return (
+        <div style={styles.activeRelationRoot} className="animate-fade-in">
+          <div style={styles.activeRelationContainer}>
+            <div style={styles.activeRelationCard}>
+              <div style={styles.cardHeaderSmall}>Mogelijke connectie</div>
+              
+              <div style={styles.activeRelationIdeasRow}>
+                <div style={styles.activeRelationIdea}>
+                  {tokenA.drawingDataUrl && (
+                    <img src={tokenA.drawingDataUrl} alt="" style={styles.relationIdeaSketch} />
+                  )}
+                  <div style={styles.relationIdeaTitle}>{tokenA.ai_metadata?.title || tokenA.text}</div>
+                  <div style={styles.relationIdeaDesc}>
+                    {tokenA.ai_metadata?.summary || tokenA.description}
+                  </div>
+                  {tokenA.ai_metadata?.creative_intent && (
+                    <div style={{ fontSize: '0.75rem', fontStyle: 'italic', marginTop: '0.4rem', color: '#71717a' }}>
+                      <strong>Intentie:</strong> {tokenA.ai_metadata.creative_intent}
+                    </div>
+                  )}
+                </div>
+                
+                <div style={styles.plusSign}>+</div>
+                
+                <div style={styles.activeRelationIdea}>
+                  {tokenB.drawingDataUrl && (
+                    <img src={tokenB.drawingDataUrl} alt="" style={styles.relationIdeaSketch} />
+                  )}
+                  <div style={styles.relationIdeaTitle}>{tokenB.ai_metadata?.title || tokenB.text}</div>
+                  <div style={styles.relationIdeaDesc}>
+                    {tokenB.ai_metadata?.summary || tokenB.description}
+                  </div>
+                  {tokenB.ai_metadata?.creative_intent && (
+                    <div style={{ fontSize: '0.75rem', fontStyle: 'italic', marginTop: '0.4rem', color: '#71717a' }}>
+                      <strong>Intentie:</strong> {tokenB.ai_metadata.creative_intent}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={styles.explanationSection}>
+                <div style={styles.explanationIntro}>Deze ideeën sluiten op elkaar aan omdat:</div>
+                <ul style={styles.reasonsList}>
+                  {tokenA.ai_metadata?.possible_connections && tokenA.ai_metadata.possible_connections.length > 0 ? (
+                    tokenA.ai_metadata.possible_connections.map((conn, idx) => (
+                      <li key={idx} style={styles.reasonItem}>
+                        <span style={styles.bullet}>•</span>
+                        <span>{conn}</span>
+                      </li>
+                    ))
+                  ) : tokenB.ai_metadata?.possible_connections && tokenB.ai_metadata.possible_connections.length > 0 ? (
+                    tokenB.ai_metadata.possible_connections.map((conn, idx) => (
+                      <li key={idx} style={styles.reasonItem}>
+                        <span style={styles.bullet}>•</span>
+                        <span>{conn}</span>
+                      </li>
+                    ))
+                  ) : (
+                    explanation.reasons.map((reason, rIdx) => (
+                      <li key={rIdx} style={styles.reasonItem}>
+                        <span style={styles.bullet}>•</span>
+                        <span>{renderReason(reason)}</span>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </div>
+
+              <div style={styles.questionSection}>
+                <div style={styles.questionLabel}>Creatieve vraag:</div>
+                <div style={styles.questionText}>{explanation.question}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
   }
 
   const hasIdeas = tokens.length > 0;
@@ -337,24 +534,40 @@ export function SystemInsights() {
                   </div>
 
                   <div style={styles.chipRow}>
-                    {card.ideas.map((idea, cIdx) => (
-                      <span key={cIdx} style={styles.chip}>
-                        {idea.drawingDataUrl && (
-                          <img
-                            src={idea.drawingDataUrl}
-                            alt=""
-                            style={{
-                              width: '32px',
-                              height: '24px',
-                              objectFit: 'contain',
-                              backgroundColor: 'transparent',
-                              borderRadius: '2px',
-                            }}
-                          />
-                        )}
-                        <span>{idea.text}</span>
-                      </span>
-                    ))}
+                    {card.ideas.map((idea, cIdx) => {
+                      const originalToken = tokens.find(t => t.text === idea.text || t.ai_metadata?.title === idea.text);
+                      return (
+                        <span key={cIdx} style={{
+                          ...styles.chip,
+                          flexDirection: 'column',
+                          alignItems: 'flex-start',
+                          gap: '0.25rem',
+                          padding: '0.5rem 0.75rem'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            {idea.drawingDataUrl && (
+                              <img
+                                src={idea.drawingDataUrl}
+                                alt=""
+                                style={{
+                                  width: '32px',
+                                  height: '24px',
+                                  objectFit: 'contain',
+                                  backgroundColor: 'transparent',
+                                  borderRadius: '2px',
+                                }}
+                              />
+                            )}
+                            <span style={{ fontWeight: 600 }}>{originalToken?.ai_metadata?.title || idea.text}</span>
+                          </div>
+                          {originalToken?.ai_metadata?.summary && (
+                            <p style={{ margin: 0, fontSize: '0.75rem', color: '#52525b', maxWidth: '280px', lineHeight: '1.3' }}>
+                              {originalToken.ai_metadata.summary}
+                            </p>
+                          )}
+                        </span>
+                      );
+                    })}
                   </div>
 
                   {card.suggestion && (
@@ -641,5 +854,148 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#09090b',
     letterSpacing: '0.05em',
     lineHeight: 1,
+  },
+  activeRelationRoot: {
+    width: '100vw',
+    height: '100vh',
+    backgroundColor: '#f4f4f5',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+    color: '#09090b',
+    padding: '2rem',
+    boxSizing: 'border-box' as const,
+  },
+  activeRelationContainer: {
+    maxWidth: 900,
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+  },
+  activeRelationCard: {
+    backgroundColor: '#ffffff',
+    border: '2px solid #09090b',
+    borderRadius: 8,
+    padding: '3rem',
+    width: '100%',
+    boxSizing: 'border-box' as const,
+    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '2.5rem',
+    position: 'relative' as const,
+    backgroundImage: `
+      repeating-linear-gradient(0deg, transparent 0px, transparent 24px, #f4f4f5 24px, #f4f4f5 25px),
+      repeating-linear-gradient(90deg, transparent 0px, transparent 24px, #f4f4f5 24px, #f4f4f5 25px)
+    `,
+    backgroundSize: '25px 25px',
+  },
+  cardHeaderSmall: {
+    fontSize: '0.9rem',
+    fontWeight: 700,
+    color: '#10b981',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.15em',
+    textAlign: 'center' as const,
+  },
+  activeRelationIdeasRow: {
+    display: 'flex',
+    alignItems: 'stretch',
+    justifyContent: 'space-between',
+    gap: '2rem',
+    width: '100%',
+  },
+  activeRelationIdea: {
+    flex: 1,
+    backgroundColor: '#f4f4f5',
+    border: '1px solid #d4d4d8',
+    borderRadius: 6,
+    padding: '2rem',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    textAlign: 'center' as const,
+    justifyContent: 'center',
+    boxShadow: 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.02)',
+  },
+  relationIdeaSketch: {
+    width: '120px',
+    height: '90px',
+    objectFit: 'contain' as const,
+    marginBottom: '1rem',
+    backgroundColor: 'transparent',
+  },
+  relationIdeaTitle: {
+    fontSize: '1.4rem',
+    fontWeight: 800,
+    color: '#09090b',
+    marginBottom: '0.5rem',
+    lineHeight: 1.3,
+  },
+  relationIdeaDesc: {
+    fontSize: '0.95rem',
+    color: '#71717a',
+    lineHeight: 1.5,
+  },
+  plusSign: {
+    fontSize: '2.5rem',
+    fontWeight: 300,
+    color: '#a1a1aa',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  explanationSection: {
+    borderTop: '1px solid #e4e4e7',
+    paddingTop: '2rem',
+  },
+  explanationIntro: {
+    fontSize: '1.15rem',
+    fontWeight: 600,
+    color: '#52525b',
+    marginBottom: '1.25rem',
+  },
+  reasonsList: {
+    listStyleType: 'none',
+    padding: 0,
+    margin: 0,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.75rem',
+  },
+  reasonItem: {
+    fontSize: '1.1rem',
+    color: '#27272a',
+    lineHeight: 1.6,
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '0.75rem',
+  },
+  bullet: {
+    color: '#10b981',
+    fontWeight: 900,
+  },
+  questionSection: {
+    backgroundColor: '#ecfdf5',
+    border: '1px solid #a7f3d0',
+    borderRadius: 6,
+    padding: '2rem',
+    boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.05)',
+  },
+  questionLabel: {
+    fontSize: '0.9rem',
+    fontWeight: 700,
+    color: '#047857',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.08em',
+    marginBottom: '0.5rem',
+  },
+  questionText: {
+    fontSize: '1.3rem',
+    fontWeight: 700,
+    color: '#064e3b',
+    lineHeight: 1.4,
   },
 };
