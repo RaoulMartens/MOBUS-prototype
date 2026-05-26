@@ -293,22 +293,6 @@ export function SystemInsights() {
             </div>
             
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              {/* QR Code pairing badge */}
-              <div style={styles.qrCodeBadge}>
-                <div style={styles.qrCodeSVGContainer}>
-                  <QRCodeSVG
-                    value={getNetworkPhoneUrl(sessionId)}
-                    size={48}
-                    bgColor="#ffffff"
-                    fgColor="#09090b"
-                  />
-                </div>
-                <div style={styles.qrCodeTextContainer}>
-                  <span style={styles.qrCodeTitle}>Koppel telefoon</span>
-                  <span style={styles.qrCodeSession}>Sessie: <strong style={{ fontFamily: 'monospace' }}>{sessionId.replace(/^mobus-/, '')}</strong></span>
-                </div>
-              </div>
-
               <div style={{
                 ...styles.thinkingIndicator,
                 opacity: isThinking ? 1 : 0.45
@@ -577,40 +561,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '1rem',
     color: '#71717a',
   },
-  qrCodeBadge: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.6rem',
-    backgroundColor: '#ffffff',
-    border: '1px solid #a1a1aa',
-    borderRadius: 4,
-    padding: '0.4rem 0.6rem',
-  },
-  qrCodeSVGContainer: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '0.15rem',
-    backgroundColor: '#ffffff',
-    border: '1px solid #e4e4e7',
-    borderRadius: 2,
-  },
-  qrCodeTextContainer: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.1rem',
-  },
-  qrCodeTitle: {
-    fontSize: '0.65rem',
-    fontWeight: 700,
-    color: '#09090b',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
-  },
-  qrCodeSession: {
-    fontSize: '0.75rem',
-    color: '#71717a',
-  },
+
   landingRoot: {
     width: '100vw',
     height: '100vh',
