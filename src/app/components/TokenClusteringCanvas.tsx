@@ -263,8 +263,10 @@ export function TokenClusteringCanvas() {
   function calculateGrassAreas() {
     const WILT_TIME = 30000;
     const clusterData: Array<{
+      id: string;
       x: number;
       y: number;
+      radius: number;
       size: number;
       lastInteracted: number;
       isWilted: boolean;
@@ -294,8 +296,8 @@ export function TokenClusteringCanvas() {
         });
       }
 
-      // ONLY size >= 3 forms clusters
-      if (cluster.size >= 3) {
+      // Any group of 2 or more forms a cluster circle
+      if (cluster.size >= 2) {
         const clusterTokens = Array.from(cluster).map(id =>
           canvasTokens.find(t => t.id === id)
         ).filter(t => t !== undefined) as CanvasToken[];
@@ -306,9 +308,17 @@ export function TokenClusteringCanvas() {
           const lastInteracted = Math.max(...clusterTokens.map(t => t.lastInteracted || 0));
           const timeSinceInteraction = currentTime - lastInteracted;
 
+          // Bounding circle calculation: max distance from center to any token
+          const maxDist = Math.max(...clusterTokens.map(t => getDistance(avgX, avgY, t.x, t.y)));
+          const radius = Math.max(maxDist + 72, 80);
+
+          const clusterId = Array.from(cluster).sort().join(',');
+
           clusterData.push({
+            id: clusterId,
             x: avgX,
             y: avgY,
+            radius,
             size: clusterTokens.length,
             lastInteracted,
             isWilted: timeSinceInteraction > WILT_TIME
@@ -460,7 +470,7 @@ export function TokenClusteringCanvas() {
         x: cluster.x,
         y: cluster.y - 80,
         isCollapsed: false,
-        targetId: `cluster-${cluster.x}-${cluster.y}`,
+        targetId: `cluster-${cluster.id}`,
         createdAt: Date.now()
       });
     }
@@ -659,11 +669,7 @@ export function TokenClusteringCanvas() {
     return true; // No active focus: draw normally (subtly)
   };
 
-  // Cluster circle visibility rule: only draw when cluster is targeted by AI prompt
-  const shouldRenderClusterCircle = (area: any) => {
-    if (aiPrompt && aiPrompt.targetId === `cluster-${area.x}-${area.y}`) return true;
-    return false;
-  };
+
 
   return (
     <div className="w-full h-full relative overflow-hidden" style={{ backgroundColor: '#f4f4f5' }}>
@@ -705,25 +711,23 @@ export function TokenClusteringCanvas() {
         <div className="w-1.5 h-1.5 rounded-full border border-zinc-950 bg-transparent" />
       </div>
 
-      {/* Dynamic cluster circles (only when cluster has clear active purpose) */}
-      {grassAreas.filter(shouldRenderClusterCircle).map((area, index) => {
-        const baseRadius = 90;
-        const radius = baseRadius + (area.size * 35);
+      {/* Dynamic cluster circles */}
+      {grassAreas.map((area) => {
+        const isTargeted = aiPrompt && aiPrompt.targetId === `cluster-${area.id}`;
 
         return (
           <div
-            key={`cluster-${index}`}
-            className="absolute pointer-events-none transition-all duration-1000"
+            key={`cluster-${area.id}`}
+            className={`absolute pointer-events-none cluster-glowing-circle ${isTargeted ? 'cluster-targeted-pulse' : ''}`}
             style={{
               left: `${area.x}px`,
               top: `${area.y}px`,
-              width: `${radius * 2}px`,
-              height: `${radius * 2}px`,
+              width: `${area.radius * 2}px`,
+              height: `${area.radius * 2}px`,
               transform: 'translate(-50%, -50%)',
               borderRadius: '50%',
-              border: '1.5px dashed #71717a',
+              border: isTargeted ? '2px solid #fbbf24' : '2px solid #10b981',
               background: 'transparent',
-              boxShadow: 'none',
               opacity: 0.8,
             }}
           />
@@ -1149,6 +1153,26 @@ export function TokenClusteringCanvas() {
             opacity: 0;
             transform: translate(-50%, -50%) scale(1.4);
             border-width: 0.5px;
+          }
+        }
+        .cluster-glowing-circle {
+          transition-property: left, top, width, height, opacity, border-color !important;
+          transition-duration: 0.4s !important;
+          transition-timing-function: cubic-bezier(0.25, 1, 0.5, 1) !important;
+          box-shadow: 0 0 16px rgba(16, 185, 129, 0.35), inset 0 0 12px rgba(16, 185, 129, 0.15) !important;
+        }
+        .cluster-targeted-pulse {
+          box-shadow: 0 0 24px rgba(251, 191, 36, 0.6), inset 0 0 16px rgba(251, 191, 36, 0.3) !important;
+          animation: clusterTargetPulse 2s infinite ease-in-out;
+        }
+        @keyframes clusterTargetPulse {
+          0%, 100% {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 0.8;
+          }
+          50% {
+            transform: translate(-50%, -50%) scale(1.02);
+            opacity: 0.95;
           }
         }
       `}</style>
