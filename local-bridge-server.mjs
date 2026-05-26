@@ -198,35 +198,26 @@ async function classifyAndSaveToken(sessionId, tokenId, text, description) {
     return;
   }
 
-  const systemPrompt = `You are an AI classification and validation assistant for MOBUS, a system that clusters ideas for workshops.
-You must first validate the user's input before classifying it.
+  const systemPrompt = `You are an AI observation and interpretation assistant for MOBUS, a system that displays and links ideas during creative group sessions.
+Users step into the MOBUS for many different purposes (e.g., brainstorming, community project planning, design tasks, education, playful exploration, or open-ended creative work). 
+Therefore, you are NOT a gatekeeper/moderator and you are NOT allowed to reject or block ideas. Every idea is valid because the user decides what matters. 
 
-Validation Rules:
-1. Too Short: If the input has fewer than 8 meaningful characters (excluding spaces/punctuation), set validation_status to "too_short".
-2. Too Vague: If the input consists of random letters (e.g. "ffgg", "asdf"), gibberish, single words with no context, or has no clear meaning, set validation_status to "too_vague".
-3. Off Topic: If the input is completely unrelated to MOBUS, creative collaboration, interaction, space, learning, research, or idea development, set validation_status to "off_topic".
-4. Not An Idea: If the input is just greeting, swearing, or non-idea chat (e.g. "hallo", "test"), set validation_status to "not_an_idea".
-5. Valid: If it is a usable creative idea with sufficient context, set validation_status to "valid".
+Your role is to observe, interpret the idea broadly, extract tags/metadata, and suggest possible relationships or cluster directions in a supportive manner.
+If an idea seems short, vague, or unusual, do your best to interpret it metaphorically, creatively, or link it broadly. Never mark an idea as "invalid", "off_topic", or unusable. 
 
-If validation_status is NOT "valid":
-- set is_usable_idea to false.
-- set should_cluster to false.
-- set category to "onbekend".
-- set perspective to "unknown".
-- set confidence to a value below 0.4.
-- set cluster_name to "null".
-- set user_friendly_feedback to a helpful, friendly Dutch message asking the user to add more context (e.g., "Dit idee is nog te vaag om te koppelen. Voeg iets meer context toe via je telefoon.").
+Return a confidence score reflecting how clear the idea's intent is, but never block the idea. 
 
-If validation_status is "valid":
-- set is_usable_idea to true.
-- set should_cluster to true.
-- set category to one of: "ruimte", "interactie", "samenwerking", "technologie", "creativiteit", "proces", "onbekend".
-- set perspective to one of: "UX", "technology", "business", "creativity", "unknown".
-- set confidence to a value between 0.4 and 1.0.
-- set user_friendly_feedback to a positive Dutch validation message.
-- set cluster_name to a broad, useful, session-related Dutch cluster name. Avoid strange names. Use names like: "Samen ideeën ontwikkelen", "Ruimte en opstelling", "AI als creatieve prikkel", "Reflectie en overzicht", "Interacties op de tafel".
-
-Provide strict JSON output matching the schema. All text fields (title, summary, user_friendly_feedback, cluster_name, creative_intent) must be in Dutch.`;
+Provide strict JSON output matching this schema. All text fields (title, summary, interpretation, cluster_name, creative_intent) must be in Dutch:
+- title: Short Dutch title
+- summary: One sentence Dutch summary
+- interpretation: Broad Dutch interpretation of the idea's potential contribution to the session
+- category: one of "ruimte", "interactie", "samenwerking", "technologie", "creativiteit", "proces", "onbekend"
+- perspective: one of "UX", "technology", "business", "creativity", "unknown"
+- tags: array of strings (at least 2-3 relevant tags)
+- confidence: number between 0.0 and 1.0 (low for vague/unclear ideas, high for clear ideas)
+- cluster_name: a broad, useful, session-related Dutch cluster name (e.g. "Samen ideeën ontwikkelen", "Ruimte en opstelling", "Gemeenschap en cultuur", "Spel en beweging", "AI en interactie")
+- creative_intent: what this idea could contribute to a session
+- possible_connections: array of strings explaining potential relationships in one short sentence each`;
 
   const prompt = `${systemPrompt}\n\nUser Idea:\nTitle: ${text || ""}\nDescription: ${description || ""}`;
 
@@ -246,11 +237,9 @@ Provide strict JSON output matching the schema. All text fields (title, summary,
           responseSchema: {
             type: "OBJECT",
             properties: {
-              is_usable_idea: { type: "BOOLEAN" },
-              validation_status: { type: "STRING", enum: ["valid", "too_vague", "too_short", "off_topic", "not_an_idea"] },
-              user_friendly_feedback: { type: "STRING" },
               title: { type: "STRING" },
               summary: { type: "STRING" },
+              interpretation: { type: "STRING" },
               category: { type: "STRING", enum: ["ruimte", "interactie", "samenwerking", "technologie", "creativiteit", "proces", "onbekend"] },
               perspective: { type: "STRING", enum: ["UX", "technology", "business", "creativity", "unknown"] },
               tags: {
@@ -258,7 +247,6 @@ Provide strict JSON output matching the schema. All text fields (title, summary,
                 items: { type: "STRING" }
               },
               confidence: { type: "NUMBER" },
-              should_cluster: { type: "BOOLEAN" },
               cluster_name: { type: "STRING" },
               creative_intent: { type: "STRING" },
               possible_connections: {
@@ -267,16 +255,13 @@ Provide strict JSON output matching the schema. All text fields (title, summary,
               }
             },
             required: [
-              "is_usable_idea",
-              "validation_status",
-              "user_friendly_feedback",
               "title",
               "summary",
+              "interpretation",
               "category",
               "perspective",
               "tags",
               "confidence",
-              "should_cluster",
               "cluster_name",
               "creative_intent",
               "possible_connections"

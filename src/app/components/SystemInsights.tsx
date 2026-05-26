@@ -233,12 +233,7 @@ export function SystemInsights() {
   const prevTokensSignature = useRef('');
 
   const clusterableTokens = useMemo(() => {
-    return tokens.filter(t => {
-      if (t.ai_metadata) {
-        return t.ai_metadata.is_usable_idea !== false && t.ai_metadata.should_cluster !== false;
-      }
-      return true; // if pending, keep for now
-    });
+    return tokens;
   }, [tokens]);
 
   useEffect(() => {

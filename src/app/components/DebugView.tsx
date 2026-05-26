@@ -210,26 +210,6 @@ export function DebugView() {
                         <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wide border-b pb-1">AI Metadata (Gemini)</h3>
                         {token.ai_metadata ? (
                           <div className="space-y-2.5">
-                            <div className="grid grid-cols-2 gap-2 text-xs border-b pb-2 mb-2 border-zinc-100 dark:border-zinc-800">
-                              <div>
-                                <span className="font-semibold text-zinc-400">Usable Idea?</span>
-                                <p className={`font-bold mt-0.5 ${token.ai_metadata.is_usable_idea ? 'text-green-600' : 'text-red-500'}`}>
-                                  {token.ai_metadata.is_usable_idea ? "Ja" : "Nee"}
-                                </p>
-                              </div>
-                              <div>
-                                <span className="font-semibold text-zinc-400">Validation Status:</span>
-                                <p className="font-bold mt-0.5 font-mono">{token.ai_metadata.validation_status}</p>
-                              </div>
-                            </div>
-
-                            {token.ai_metadata.user_friendly_feedback && (
-                              <div>
-                                <span className="text-xs font-semibold text-zinc-400">Feedback:</span>
-                                <p className="text-xs mt-0.5 italic text-zinc-700 dark:text-zinc-300">{token.ai_metadata.user_friendly_feedback}</p>
-                              </div>
-                            )}
-
                             <div className="grid grid-cols-2 gap-2 text-xs">
                               <div>
                                 <span className="font-semibold text-zinc-400">Categorie:</span>
@@ -244,18 +224,20 @@ export function DebugView() {
                               <span className="text-xs font-semibold text-zinc-400">AI Samenvatting:</span>
                               <p className="text-xs mt-0.5">{token.ai_metadata.summary}</p>
                             </div>
+                            {token.ai_metadata.interpretation && (
+                              <div>
+                                <span className="text-xs font-semibold text-zinc-400">AI Interpretatie:</span>
+                                <p className="text-xs mt-0.5 italic text-zinc-700 dark:text-zinc-300">{token.ai_metadata.interpretation}</p>
+                              </div>
+                            )}
                             <div>
                               <span className="text-xs font-semibold text-zinc-400">Creatieve Intentie:</span>
                               <p className="text-xs mt-0.5">{token.ai_metadata.creative_intent}</p>
                             </div>
-                            <div className="grid grid-cols-3 gap-2 text-xs pt-1 border-t border-zinc-100 dark:border-zinc-800">
+                            <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-zinc-100 dark:border-zinc-800">
                               <div>
                                 <span className="font-semibold text-zinc-400">Betrouwbaarheid AI:</span>
                                 <p className="font-bold mt-0.5">{Math.round(token.ai_metadata.confidence * 100)}%</p>
-                              </div>
-                              <div>
-                                <span className="font-semibold text-zinc-400">Should Cluster?</span>
-                                <p className="font-bold mt-0.5">{token.ai_metadata.should_cluster ? "Ja" : "Nee"}</p>
                               </div>
                               <div>
                                 <span className="font-semibold text-zinc-400">Cluster Name:</span>

@@ -25,16 +25,13 @@ export interface Token {
   createdAt: string;
   status?: string;
   ai_metadata?: {
-    is_usable_idea?: boolean;
-    validation_status?: "valid" | "too_vague" | "too_short" | "off_topic" | "not_an_idea";
-    user_friendly_feedback?: string;
     title: string;
     summary: string;
+    interpretation?: string;
     category: string;
     perspective: string;
     tags: string[];
     confidence: number;
-    should_cluster?: boolean;
     cluster_name?: string | null;
     creative_intent: string;
     possible_connections: string[];

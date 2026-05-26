@@ -243,12 +243,7 @@ export function TokenClusteringCanvas() {
   };
 
   const clusterableCanvasTokens = useMemo(() => {
-    return canvasTokens.filter(t => {
-      if (t.ai_metadata) {
-        return t.ai_metadata.is_usable_idea !== false && t.ai_metadata.should_cluster !== false;
-      }
-      return true;
-    });
+    return canvasTokens;
   }, [canvasTokens]);
 
   const getConnections = () => {
@@ -256,8 +251,8 @@ export function TokenClusteringCanvas() {
     const proximityLines: Array<{ from: string; to: string; distance: number }> = [];
     const connectedTokenIds = new Set<string>();
 
-    clusterableCanvasTokens.forEach((token, i) => {
-      clusterableCanvasTokens.slice(i + 1).forEach((otherToken) => {
+    canvasTokens.forEach((token, i) => {
+      canvasTokens.slice(i + 1).forEach((otherToken) => {
         const distance = getDistance(token.x, token.y, otherToken.x, otherToken.y);
         if (distance < SNAP_DISTANCE) {
           connections.push({ from: token.id, to: otherToken.id, distance });

@@ -23,16 +23,13 @@ interface TokenProps {
   isDimmed?: boolean;
   status?: string;
   ai_metadata?: {
-    is_usable_idea?: boolean;
-    validation_status?: "valid" | "too_vague" | "too_short" | "off_topic" | "not_an_idea";
-    user_friendly_feedback?: string;
     title: string;
     summary: string;
+    interpretation?: string;
     category: string;
     perspective: string;
     tags: string[];
     confidence: number;
-    should_cluster?: boolean;
     cluster_name?: string | null;
     creative_intent: string;
     possible_connections: string[];
@@ -443,44 +440,43 @@ export function Token({
             />
           )}
           {ai_metadata ? (
-            ai_metadata.is_usable_idea === false ? (
-              <div className="text-left space-y-2">
-                <div className="text-[11px] font-bold text-red-650 dark:text-red-400 border-b pb-1">
-                  ⚠️ Feedback
-                </div>
-                <p className="text-[10px] text-zinc-650 dark:text-zinc-350 leading-normal italic">
-                  {ai_metadata.user_friendly_feedback || "Dit idee is nog te vaag om te koppelen. Voeg iets meer context toe via je telefoon."}
-                </p>
+            <div className="text-left space-y-2">
+              <div className="text-[11px] font-bold text-zinc-900 dark:text-zinc-100 border-b pb-1">
+                {ai_metadata.title || label}
               </div>
-            ) : (
-              <div className="text-left space-y-2">
-                <div className="text-[11px] font-bold text-zinc-900 dark:text-zinc-100 border-b pb-1">
-                  {ai_metadata.title || label}
-                </div>
-                <p className="text-[9px] text-zinc-600 dark:text-zinc-300 leading-normal">
-                  {ai_metadata.summary || description}
+              <p className="text-[9px] text-zinc-750 dark:text-zinc-250 leading-normal font-semibold">
+                {ai_metadata.summary}
+              </p>
+              {ai_metadata.interpretation && (
+                <p className="text-[9px] text-zinc-600 dark:text-zinc-350 leading-normal italic">
+                  {ai_metadata.interpretation}
                 </p>
-                
+              )}
+              {!ai_metadata.interpretation && description && (
+                <p className="text-[9px] text-zinc-500 dark:text-zinc-400 leading-normal">
+                  {description}
+                </p>
+              )}
+              
+              <div className="flex flex-wrap gap-1 pt-1">
+                <span className="text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-zinc-100 border border-zinc-300 text-zinc-700">
+                  📁 {ai_metadata.category}
+                </span>
+                <span className="text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-zinc-100 border border-zinc-300 text-zinc-700">
+                  👁️ {ai_metadata.perspective}
+                </span>
+              </div>
+              
+              {ai_metadata.tags && ai_metadata.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1 pt-1">
-                  <span className="text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-zinc-100 border border-zinc-300 text-zinc-700">
-                    📁 {ai_metadata.category}
-                  </span>
-                  <span className="text-[8.5px] font-bold px-1.5 py-0.5 rounded bg-zinc-100 border border-zinc-300 text-zinc-700">
-                    👁️ {ai_metadata.perspective}
-                  </span>
+                  {ai_metadata.tags.map((t, idx) => (
+                    <span key={idx} className="text-[7.5px] font-medium px-1.5 py-0.2 bg-zinc-100 text-zinc-655 rounded-full border border-zinc-200">
+                      #{t}
+                    </span>
+                  ))}
                 </div>
-                
-                {ai_metadata.tags && ai_metadata.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {ai_metadata.tags.map((t, idx) => (
-                      <span key={idx} className="text-[7.5px] font-medium px-1.5 py-0.2 bg-zinc-100 text-zinc-655 rounded-full border border-zinc-200">
-                        #{t}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
+              )}
+            </div>
           ) : (
             description && (
               <p className="text-[10px] text-zinc-800 dark:text-zinc-100 text-center leading-normal font-medium">
