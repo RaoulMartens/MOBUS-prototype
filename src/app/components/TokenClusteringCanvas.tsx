@@ -711,29 +711,6 @@ export function TokenClusteringCanvas() {
         <div className="w-1.5 h-1.5 rounded-full border border-zinc-950 bg-transparent" />
       </div>
 
-      {/* Dynamic cluster circles */}
-      {grassAreas.map((area) => {
-        const isTargeted = aiPrompt && aiPrompt.targetId === `cluster-${area.id}`;
-
-        return (
-          <div
-            key={`cluster-${area.id}`}
-            className={`absolute pointer-events-none cluster-glowing-circle ${isTargeted ? 'cluster-targeted-pulse' : ''}`}
-            style={{
-              left: `${area.x}px`,
-              top: `${area.y}px`,
-              width: `${area.radius * 2}px`,
-              height: `${area.radius * 2}px`,
-              transform: 'translate(-50%, -50%)',
-              borderRadius: '50%',
-              border: isTargeted ? '2px solid #fbbf24' : '2px solid #10b981',
-              background: 'transparent',
-              opacity: 0.8,
-            }}
-          />
-        );
-      })}
-
       <div ref={canvasRef} className="w-full h-full relative" onClick={handleCanvasClick}>
         {showStartState && (
           <TableEmptyState />
@@ -927,6 +904,30 @@ export function TokenClusteringCanvas() {
           }
 
           return null;
+        })}
+
+        {/* Dynamic cluster circles */}
+        {grassAreas.map((area) => {
+          const isTargeted = aiPrompt && aiPrompt.targetId === `cluster-${area.id}`;
+
+          return (
+            <div
+              key={`cluster-${area.id}`}
+              className={`absolute pointer-events-none cluster-glowing-circle ${isTargeted ? 'cluster-targeted-pulse' : ''}`}
+              style={{
+                left: `${area.x}px`,
+                top: `${area.y}px`,
+                width: `${area.radius * 2}px`,
+                height: `${area.radius * 2}px`,
+                transform: 'translate(-50%, -50%)',
+                borderRadius: '50%',
+                border: isTargeted ? '2px solid #fbbf24' : '2px solid #10b981',
+                background: 'transparent',
+                opacity: 0.8,
+                zIndex: 5,
+              }}
+            />
+          );
         })}
 
         {/* Tokens */}
