@@ -506,10 +506,10 @@ export function SystemInsights() {
           <div style={styles.headerContent}>
             <div>
               <h1 style={styles.title}>Overzicht</h1>
-              <p style={styles.subtitle}>Terwijl jullie ideeën groeien, ontdekt MOBUS patronen, connecties en nieuwe richtingen om samen te verkennen.</p>
+              <p style={styles.subtitle}>Terwijl jullie ideeën groeien, ontdekt MOBUS patronen, connecties en nieuwe richtingen.</p>
             </div>
             
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
               <div style={{
                 ...styles.thinkingIndicator,
                 opacity: isThinking ? 1 : 0.45
@@ -526,97 +526,103 @@ export function SystemInsights() {
           </div>
         </header>
 
-        {/* ── Dynamic AI Reflection Component ── */}
-        {insight && insight.state !== "standby" ? (
-          <div style={styles.liveInsightCard} className="animate-fade-in">
-            <div style={styles.liveInsightHeader}>
-              <span style={styles.liveInsightBadge}>
-                ✨ {insight.state === "suggestion" ? "AI Suggestie" : insight.state === "reflection" ? "AI Reflectievraag" : "AI Samenvatting"}
-              </span>
-              {insight.themeLabel && (
-                <span style={styles.liveInsightTheme}>{insight.themeLabel}</span>
-              )}
-            </div>
-            <h3 style={styles.liveInsightTitle}>{insight.title}</h3>
-            <p style={styles.liveInsightMessage}>{insight.message}</p>
-          </div>
-        ) : (
-          <div style={styles.liveInsightStandbyCard} className="animate-fade-in">
-            <span style={styles.liveInsightStandbyBadge}>🔮 MOBUS stand-by</span>
-            <p style={styles.liveInsightStandbyText}>
-              Beweeg ideeën op de tafel om patronen, groepen en AI-inzichten te ontdekken.
-            </p>
-          </div>
-        )}
-
-        {/* ── Ideas exist but no clusters yet ── */}
-        {hasIdeas && !hasClusters && (
-          <div style={styles.emptyState}>
-            <p style={styles.emptyTitle}>Nog geen groepjes</p>
-            <p style={styles.emptyDesc}>
-              Sleep ideeën op de tafel naar elkaar toe om clusters te vormen. Ze verschijnen hier automatisch.
-            </p>
-            <div style={styles.ideaCount}>{tokens.length} {tokens.length === 1 ? 'idee' : 'ideeën'} op tafel</div>
-          </div>
-        )}
-
-        {/* ── Cluster cards ── */}
-        {hasClusters && (
-          <>
-            <div style={styles.statsRow}>
-              <span style={styles.statChip}>{clusterCards.length} {clusterCards.length === 1 ? 'groep' : 'groepen'}</span>
-              <span style={styles.statChip}>{tokens.length} ideeën totaal</span>
-            </div>
-
-            <div style={styles.cardGrid}>
-              {clusterCards.map((card, idx) => (
-                <div key={idx} style={styles.card}>
-                  <div style={styles.cardHeader}>
-                    <span style={styles.cardLabel}>{card.label}</span>
-                    <span style={styles.cardCount}>{card.ideas.length}</span>
-                  </div>
-
-                  <div style={styles.chipRow}>
-                    {card.ideas.map((idea, cIdx) => {
-                      const originalToken = tokens.find(t => t.text === idea.text || t.ai_metadata?.title === idea.text);
-                      return (
-                        <span key={cIdx} style={{
-                          ...styles.chip,
-                          flexDirection: 'column',
-                          alignItems: 'flex-start',
-                          gap: '0.25rem',
-                          padding: '0.5rem 0.75rem'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                            {idea.drawingDataUrl && (
-                              <img
-                                src={idea.drawingDataUrl}
-                                alt=""
-                                style={{
-                                  width: '32px',
-                                  height: '24px',
-                                  objectFit: 'contain',
-                                  backgroundColor: 'transparent',
-                                  borderRadius: '2px',
-                                }}
-                              />
-                            )}
-                            <span style={{ fontWeight: 600 }}>{originalToken?.ai_metadata?.title || idea.text}</span>
-                          </div>
-                          {originalToken?.ai_metadata?.summary && (
-                            <p style={{ margin: 0, fontSize: '0.75rem', color: '#52525b', maxWidth: '280px', lineHeight: '1.3' }}>
-                              {originalToken.ai_metadata.summary}
-                            </p>
-                          )}
-                        </span>
-                      );
-                    })}
-                  </div>
+        {/* ── Main Viewport Layout ── */}
+        <div style={styles.mainLayout}>
+          {/* ── Left Column: Live AI Reflection ── */}
+          <div style={styles.leftColumn}>
+            {insight && insight.state !== "standby" ? (
+              <div style={styles.liveInsightCard} className="animate-fade-in">
+                <div style={styles.liveInsightHeader}>
+                  <span style={styles.liveInsightBadge}>
+                    ✨ {insight.state === "suggestion" ? "AI Suggestie" : insight.state === "reflection" ? "AI Reflectievraag" : "AI Samenvatting"}
+                  </span>
+                  {insight.themeLabel && (
+                    <span style={styles.liveInsightTheme}>{insight.themeLabel}</span>
+                  )}
                 </div>
-              ))}
-            </div>
-          </>
-        )}
+                <h3 style={styles.liveInsightTitle}>{insight.title}</h3>
+                <p style={styles.liveInsightMessage}>{insight.message}</p>
+              </div>
+            ) : (
+              <div style={styles.liveInsightStandbyCard} className="animate-fade-in">
+                <span style={styles.liveInsightStandbyBadge}>🔮 MOBUS stand-by</span>
+                <p style={styles.liveInsightStandbyText}>
+                  Beweeg ideeën op de tafel om patronen, groepen en AI-inzichten te ontdekken.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* ── Right Column: Manual Groups Grid ── */}
+          <div style={styles.rightColumn}>
+            {hasIdeas && !hasClusters && (
+              <div style={styles.emptyState}>
+                <p style={styles.emptyTitle}>Nog geen groepjes</p>
+                <p style={styles.emptyDesc}>
+                  Sleep ideeën op de tafel naar elkaar toe om clusters te vormen. Ze verschijnen hier automatisch.
+                </p>
+                <div style={styles.ideaCount}>{tokens.length} {tokens.length === 1 ? 'idee' : 'ideeën'} op tafel</div>
+              </div>
+            )}
+
+            {hasClusters && (
+              <>
+                <div style={styles.statsRow}>
+                  <span style={styles.statChip}>{clusterCards.length} {clusterCards.length === 1 ? 'groep' : 'groepen'}</span>
+                  <span style={styles.statChip}>{tokens.length} ideeën totaal</span>
+                </div>
+
+                <div style={styles.cardGrid}>
+                  {clusterCards.map((card, idx) => (
+                    <div key={idx} style={styles.card}>
+                      <div style={styles.cardHeader}>
+                        <span style={styles.cardLabel}>{card.label}</span>
+                        <span style={styles.cardCount}>{card.ideas.length}</span>
+                      </div>
+
+                      <div style={styles.chipRow}>
+                        {card.ideas.map((idea, cIdx) => {
+                          const originalToken = tokens.find(t => t.text === idea.text || t.ai_metadata?.title === idea.text);
+                          return (
+                            <span key={cIdx} style={{
+                              ...styles.chip,
+                              flexDirection: 'column',
+                              alignItems: 'flex-start',
+                              gap: '0.25rem',
+                              padding: '0.5rem 0.75rem'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                {idea.drawingDataUrl && (
+                                  <img
+                                    src={idea.drawingDataUrl}
+                                    alt=""
+                                    style={{
+                                      width: '32px',
+                                      height: '24px',
+                                      objectFit: 'contain',
+                                      backgroundColor: 'transparent',
+                                      borderRadius: '2px',
+                                    }}
+                                  />
+                                )}
+                                <span style={{ fontWeight: 600 }}>{originalToken?.ai_metadata?.title || idea.text}</span>
+                              </div>
+                              {originalToken?.ai_metadata?.summary && (
+                                <p style={{ margin: 0, fontSize: '0.75rem', color: '#52525b', maxWidth: '280px', lineHeight: '1.3' }}>
+                                  {originalToken.ai_metadata.summary}
+                                </p>
+                              )}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -625,27 +631,49 @@ export function SystemInsights() {
 // ── Inline styles (wireframe, no CSS file needed) ──
 const styles: Record<string, React.CSSProperties> = {
   root: {
-    width: '100%',
-    height: '100%',
+    width: '100vw',
+    height: '100vh',
     backgroundColor: '#f4f4f5',
-    overflow: 'auto',
+    overflow: 'hidden',
     fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
     color: '#09090b',
+    boxSizing: 'border-box',
   },
   container: {
-    maxWidth: 800,
-    margin: '0 auto',
-    padding: '4rem 2rem',
+    width: '100%',
+    height: '100%',
+    padding: '2rem 3rem',
+    display: 'flex',
+    flexDirection: 'column',
+    boxSizing: 'border-box',
   },
   header: {
-    marginBottom: '2.5rem',
+    marginBottom: '1.5rem',
+    flexShrink: 0,
   },
   headerContent: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: '1rem',
-    flexWrap: 'wrap' as const,
+  },
+  mainLayout: {
+    flex: 1,
+    display: 'flex',
+    gap: '2.5rem',
+    minHeight: 0,
+  },
+  leftColumn: {
+    width: '320px',
+    flexShrink: 0,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  rightColumn: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 0,
   },
   thinkingIndicator: {
     display: 'flex',
@@ -680,11 +708,11 @@ const styles: Record<string, React.CSSProperties> = {
   title: {
     fontSize: '2rem',
     fontWeight: 700,
-    margin: '0 0 0.5rem 0',
+    margin: '0 0 0.25rem 0',
     letterSpacing: '-0.02em',
   },
   subtitle: {
-    fontSize: '1rem',
+    fontSize: '0.95rem',
     color: '#71717a',
     margin: 0,
   },
@@ -692,7 +720,8 @@ const styles: Record<string, React.CSSProperties> = {
   statsRow: {
     display: 'flex',
     gap: '0.75rem',
-    marginBottom: '1.5rem',
+    marginBottom: '1rem',
+    flexShrink: 0,
   },
   statChip: {
     fontSize: '0.8rem',
@@ -706,8 +735,13 @@ const styles: Record<string, React.CSSProperties> = {
   // Cards
   cardGrid: {
     display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '1rem',
+    flexDirection: 'row' as const,
+    gap: '1.25rem',
+    overflowX: 'auto',
+    overflowY: 'hidden',
+    flex: 1,
+    minHeight: 0,
+    paddingBottom: '0.75rem',
   },
   card: {
     backgroundColor: '#ffffff',
@@ -717,11 +751,16 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '0.75rem',
+    width: '340px',
+    flexShrink: 0,
+    maxHeight: '100%',
+    boxSizing: 'border-box',
   },
   cardHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexShrink: 0,
   },
   cardLabel: {
     fontSize: '1.1rem',
@@ -742,8 +781,12 @@ const styles: Record<string, React.CSSProperties> = {
   // Chips
   chipRow: {
     display: 'flex',
-    flexWrap: 'wrap' as const,
+    flexDirection: 'column' as const,
     gap: '0.5rem',
+    overflowY: 'auto',
+    flex: 1,
+    minHeight: 0,
+    paddingRight: '0.25rem',
   },
   chip: {
     fontSize: '0.825rem',
@@ -771,7 +814,6 @@ const styles: Record<string, React.CSSProperties> = {
     border: '2px solid #09090b',
     borderRadius: 4,
     padding: '1.5rem',
-    marginBottom: '2rem',
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '0.75rem',
@@ -821,7 +863,6 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px dashed #a1a1aa',
     borderRadius: 4,
     padding: '1.5rem',
-    marginBottom: '2rem',
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '0.5rem',
