@@ -15,6 +15,8 @@ interface CanvasToken {
   rotation: number;
   scale: number;
   lastInteracted: number;
+  status?: string;
+  ai_metadata?: any;
 }
 
 interface AIPrompt {
