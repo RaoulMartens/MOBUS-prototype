@@ -100,6 +100,7 @@ const getSessionId = (): string => {
 };
 
 const normalizeToken = (id: string, data: any): Token | null => {
+  if (id === "insight") return null;
   if (data.status === "archived" || data.archived === true) return null;
   const text = data.title || data.text || "";
   if (!text.trim()) return null;

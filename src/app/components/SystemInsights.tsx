@@ -244,7 +244,7 @@ export function SystemInsights() {
 
   useEffect(() => {
     if (!sessionId) return;
-    const insightRef = doc(db, "sessions", sessionId, "state", "insight");
+    const insightRef = doc(db, "sessions", sessionId, "tokens", "insight");
     const unsubscribe = onSnapshot(insightRef, (snapshot) => {
       if (snapshot.exists()) {
         setInsight(snapshot.data() as any);
@@ -653,11 +653,6 @@ export function SystemInsights() {
 
             {hasClusters && (
               <>
-                <div style={styles.statsRow}>
-                  <span style={styles.statChip}>{clusterCards.length} {clusterCards.length === 1 ? 'groep' : 'groepen'}</span>
-                  <span style={styles.statChip}>{tokens.length} ideeën totaal</span>
-                </div>
-
                 <div style={styles.cardGrid}>
                   {clusterCards.map((card, idx) => (
                     <div key={idx} style={styles.card}>

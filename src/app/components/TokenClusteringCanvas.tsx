@@ -209,7 +209,7 @@ export function TokenClusteringCanvas() {
 
   useEffect(() => {
     if (!sessionId) return;
-    const insightRef = doc(db, "sessions", sessionId, "state", "insight");
+    const insightRef = doc(db, "sessions", sessionId, "tokens", "insight");
     const unsubscribe = onSnapshot(insightRef, (snapshot) => {
       if (snapshot.exists()) {
         setLiveInsight(snapshot.data());

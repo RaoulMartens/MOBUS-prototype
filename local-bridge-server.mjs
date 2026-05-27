@@ -49,6 +49,7 @@ function subscribeToSessionFirestore(sessionId) {
     snapshot.docChanges().forEach((change) => {
       if (change.type === "added" || change.type === "modified") {
         const tokenId = change.doc.id;
+        if (tokenId === "insight") return;
         const data = change.doc.data();
         
         if (data.status === "pending_classification" && !processingTokens.has(tokenId)) {
@@ -427,7 +428,7 @@ const getSessionSignature = (tokens, clusters) => {
 
 async function writeLiveInsightToFirestore(sessionId, insight) {
   try {
-    const docRef = doc(db, "sessions", sessionId, "state", "insight");
+    const docRef = doc(db, "sessions", sessionId, "tokens", "insight");
     await setDoc(docRef, {
       ...insight,
       updatedAt: new Date().toISOString()
@@ -467,6 +468,8 @@ Your role is to analyze the active ideas and manual clusters on the table, looki
 1. **Tension & Contrast**: Ideas or clusters with contrasting views (e.g., high-tech vs. nature, individual control vs. community participation, speed vs. safety). Point out the tension and ask a question to bridge them.
 2. **Synergy**: Ideas or clusters that complement each other and could be combined into a more powerful concept. Propose how they can reinforce each other.
 3. **Gaps**: Spot an area that feels missing between two clusters or ideas (e.g., "You have ideas about tech and ideas about ethics, but nothing on how users give feedback. What is missing in between?").
+
+CRITICAL FOR CREATIVITY: Your response must be highly creative, metaphorical, and spark design/brainstorming directions. Avoid dry descriptions. For example, if you see disparate ideas (like a person's name "Raoul" and a food item "Bami"), do not just describe them. Think about how they connect creatively (e.g. how sharing a Bami meal could build community or act as a catalyst for Raoul's perspective, or how Bami's layered ingredients map to creative collaboration). Make the connection fun and thought-provoking!
 
 Current Session Constellation:
 Active Ideas:
@@ -539,6 +542,7 @@ Provide strict JSON output matching this schema. All text fields must be in Dutc
 function processLiveReflection(sessionId, snapshot) {
   const allTokens = [];
   snapshot.forEach(docSnap => {
+    if (docSnap.id === "insight") return;
     const data = docSnap.data();
     if (data.status !== "archived") {
       allTokens.push({
