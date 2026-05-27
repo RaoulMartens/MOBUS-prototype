@@ -551,6 +551,45 @@ export function SystemInsights() {
                 </p>
               </div>
             )}
+            
+            {/* Join card with QR code */}
+            <div style={{
+              marginTop: 'auto',
+              backgroundColor: '#ffffff',
+              border: '1px solid #a1a1aa',
+              borderRadius: 4,
+              padding: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '1rem',
+            }}>
+              <div style={{
+                padding: '0.4rem',
+                backgroundColor: '#ffffff',
+                borderRadius: 4,
+                border: '1px solid #d4d4d8',
+                display: 'inline-block',
+                flexShrink: 0
+              }}>
+                <QRCodeSVG
+                  value={getNetworkPhoneUrl(sessionId)}
+                  size={64}
+                  bgColor="#ffffff"
+                  fgColor="#09090b"
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                <span style={{ fontSize: '0.7rem', fontWeight: 705, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Doe mee!
+                </span>
+                <span style={{ fontSize: '0.8rem', color: '#27272a', fontWeight: 600 }}>
+                  Scan de QR-code met je telefoon
+                </span>
+                <span style={{ fontSize: '0.75rem', fontFamily: 'monospace', color: '#71717a', marginTop: '0.1rem' }}>
+                  Code: <strong style={{ color: '#09090b', fontWeight: 700 }}>{sessionId.replace(/^mobus-/, '')}</strong>
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* ── Right Column: Manual Groups Grid ── */}
