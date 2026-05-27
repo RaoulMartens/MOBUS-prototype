@@ -502,14 +502,48 @@ export function SystemInsights() {
         }
       `}</style>
       <div style={styles.container}>
-        <header style={styles.header}>
+         <header style={styles.header}>
           <div style={styles.headerContent}>
             <div>
               <h1 style={styles.title}>Overzicht</h1>
               <p style={styles.subtitle}>Terwijl jullie ideeën groeien, ontdekt MOBUS patronen, connecties en nieuwe richtingen.</p>
             </div>
 
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
+              {/* Small compact QR code for joining */}
+              <div style={{
+                backgroundColor: '#ffffff',
+                border: '1px solid #d4d4d8',
+                borderRadius: 4,
+                padding: '0.4rem 0.6rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.6rem',
+              }}>
+                <div style={{
+                  padding: '0.15rem',
+                  backgroundColor: '#ffffff',
+                  borderRadius: 2,
+                  border: '1px solid #e4e4e7',
+                  display: 'inline-flex',
+                }}>
+                  <QRCodeSVG
+                    value={getNetworkPhoneUrl(sessionId)}
+                    size={36}
+                    bgColor="#ffffff"
+                    fgColor="#09090b"
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.05rem' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#09090b' }}>
+                    Doe mee!
+                  </span>
+                  <span style={{ fontSize: '0.625rem', fontFamily: 'monospace', color: '#71717a' }}>
+                    Code: <strong style={{ color: '#09090b', fontWeight: 700 }}>{sessionId.replace(/^mobus-/, '')}</strong>
+                  </span>
+                </div>
+              </div>
+
               <div style={{
                 ...styles.thinkingIndicator,
                 opacity: isThinking ? 1 : 0.45
@@ -533,14 +567,6 @@ export function SystemInsights() {
             {insight && insight.state !== "standby" ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }} className="animate-fade-in">
                 <div style={styles.liveInsightCard}>
-                  <div style={styles.liveInsightHeader}>
-                    <span style={styles.liveInsightBadge}>
-                      ✨ {insight.state === "suggestion" ? "AI Suggestie" : insight.state === "reflection" ? "AI Reflectievraag" : "AI Samenvatting"}
-                    </span>
-                    {insight.themeLabel && (
-                      <span style={styles.liveInsightTheme}>{insight.themeLabel}</span>
-                    )}
-                  </div>
                   <h3 style={styles.liveInsightTitle}>{insight.title}</h3>
                   <p style={styles.liveInsightMessage}>{insight.message}</p>
                 </div>
@@ -602,45 +628,6 @@ export function SystemInsights() {
                 </p>
               </div>
             )}
-            
-            {/* Join card with QR code */}
-            <div style={{
-              marginTop: '1.25rem',
-              backgroundColor: '#ffffff',
-              border: '1px solid #a1a1aa',
-              borderRadius: 4,
-              padding: '1rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '1rem',
-            }}>
-              <div style={{
-                padding: '0.4rem',
-                backgroundColor: '#ffffff',
-                borderRadius: 4,
-                border: '1px solid #d4d4d8',
-                display: 'inline-block',
-                flexShrink: 0
-              }}>
-                <QRCodeSVG
-                  value={getNetworkPhoneUrl(sessionId)}
-                  size={64}
-                  bgColor="#ffffff"
-                  fgColor="#09090b"
-                />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                <span style={{ fontSize: '0.7rem', fontWeight: 705, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Doe mee!
-                </span>
-                <span style={{ fontSize: '0.8rem', color: '#27272a', fontWeight: 600 }}>
-                  Scan de QR-code met je telefoon
-                </span>
-                <span style={{ fontSize: '0.75rem', fontFamily: 'monospace', color: '#71717a', marginTop: '0.1rem' }}>
-                  Code: <strong style={{ color: '#09090b', fontWeight: 700 }}>{sessionId.replace(/^mobus-/, '')}</strong>
-                </span>
-              </div>
-            </div>
           </div>
 
           {/* ── Right Column: Manual Groups Grid ── */}
