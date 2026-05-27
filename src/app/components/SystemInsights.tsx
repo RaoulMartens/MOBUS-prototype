@@ -603,12 +603,8 @@ export function SystemInsights() {
                             justifyContent: 'center',
                             gap: '0.25rem',
                           }}>
-                            {t.drawingDataUrl ? (
+                            {t.drawingDataUrl && (
                               <img src={t.drawingDataUrl} alt="" style={{ height: 72, width: '100%', objectFit: 'contain', marginBottom: '0.25rem' }} />
-                            ) : (
-                              <div style={{ height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', color: '#a1a1aa' }}>
-                                📝
-                              </div>
                             )}
                             <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#09090b' }}>
                               {t.ai_metadata?.title || t.text}
