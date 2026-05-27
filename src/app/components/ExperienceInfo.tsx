@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import {
   ArrowLeft,
   ArrowRight,
@@ -17,13 +17,15 @@ const createSessionId = () => `mobus-${Math.floor(1000 + Math.random() * 9000)}`
 export function ExperienceInfo() {
   const navigate = useNavigate();
   const { updateSessionId } = useTokens();
+  const [searchParams] = useSearchParams();
+  const urlSessionId = searchParams.get('sessionId');
 
   useEffect(() => {
     document.title = "MOBUS - Ecosysteem Info";
   }, []);
 
   const handleContinue = () => {
-    const sessionId = createSessionId();
+    const sessionId = urlSessionId || createSessionId();
     updateSessionId(sessionId);
     navigate(`/table?sessionId=${sessionId}`);
   };

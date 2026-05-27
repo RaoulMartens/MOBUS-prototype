@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router';
+import { BrowserRouter, Routes, Route, useNavigate, useSearchParams } from 'react-router';
 import { TokenProvider, useTokens } from './contexts/TokenContext';
 import { TokenClusteringCanvas } from './components/TokenClusteringCanvas';
 import { SystemInsights } from './components/SystemInsights';
@@ -14,12 +14,15 @@ const createSessionId = () => `mobus-${Math.floor(1000 + Math.random() * 9000)}`
 
 function DashboardWrapper() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sessionId = searchParams.get('sessionId');
 
   const handleSelectApp = (appId: string) => {
+    const query = sessionId ? `?sessionId=${sessionId}` : '';
     if (appId === 'idea-ecosystem') {
-      navigate('/info');
+      navigate(`/info${query}`);
     } else if (appId === 'phone-input') {
-      navigate('/phone');
+      navigate(`/phone${query}`);
     }
   };
 
