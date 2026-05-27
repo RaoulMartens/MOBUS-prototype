@@ -1081,7 +1081,6 @@ export function TokenClusteringCanvas() {
                   e.stopPropagation();
                   setSelectedTokenId(null);
                   setSelectedRelationKey(key);
-                  setAiPrompt(null);
                 }}
               >
                 {/* Thick invisible click target */}
