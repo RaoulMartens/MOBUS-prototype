@@ -58,7 +58,19 @@ function subscribeToSessionFirestore(sessionId) {
           const text = data.title || data.text || "";
           const description = data.description || "";
           
-          classifyAndSaveToken(sessionId, tokenId, text, description)
+          // Gather other active tokens in session for context
+          const otherTokens = [];
+          snapshot.forEach(docSnap => {
+            if (docSnap.id !== tokenId && docSnap.data().status !== "archived") {
+              otherTokens.push({
+                id: docSnap.id,
+                title: docSnap.data().title || docSnap.data().text || "",
+                description: docSnap.data().description || ""
+              });
+            }
+          });
+          
+          classifyAndSaveToken(sessionId, tokenId, text, description, otherTokens)
             .catch(err => {
               console.error(`[Bridge] Firestore auto-classification failed for token ${tokenId}:`, err);
             })
@@ -193,12 +205,18 @@ async function markAsNeedsClassification(sessionId, tokenId) {
 }
 
 // Background Gemini API classification and validation
-async function classifyAndSaveToken(sessionId, tokenId, text, description) {
+async function classifyAndSaveToken(sessionId, tokenId, text, description, otherTokens = []) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.error("[Bridge] GEMINI_API_KEY environment variable is not set.");
     await markAsNeedsClassification(sessionId, tokenId);
     return;
+  }
+
+  let contextPrompt = "";
+  if (otherTokens && otherTokens.length > 0) {
+    contextPrompt = `\nHere are the other active ideas in this brainstorming session. Use them to make SPECIFIC, REAL connections to these ideas in your possible_connections list if there are links (refer to them by their title):
+${otherTokens.map(t => `- Title: "${t.title}", Description: "${t.description || "N/A"}"`).join("\n")}\n`;
   }
 
   const systemPrompt = `You are an AI observation and interpretation assistant for MOBUS, a system that displays and links ideas during creative group sessions.
@@ -220,9 +238,9 @@ Provide strict JSON output matching this schema. All text fields (title, summary
 - confidence: number between 0.0 and 1.0 (low for vague/unclear ideas, high for clear ideas)
 - cluster_name: a broad, useful, session-related Dutch cluster name (e.g. "Samen ideeën ontwikkelen", "Ruimte en opstelling", "Gemeenschap en cultuur", "Spel en beweging", "AI en interactie")
 - creative_intent: what this idea could contribute to a session
-- possible_connections: array of strings explaining potential relationships in one short sentence each`;
+- possible_connections: array of strings explaining potential relationships in one short sentence each. If there are other ideas in the session, connect specifically to them.`;
 
-  const prompt = `${systemPrompt}\n\nUser Idea:\nTitle: ${text || ""}\nDescription: ${description || ""}`;
+  const prompt = `${systemPrompt}\n${contextPrompt}\nUser Idea:\nTitle: ${text || ""}\nDescription: ${description || ""}`;
 
   try {
     console.log(`[Bridge] Sending token ${tokenId} to Gemini...`);
@@ -338,8 +356,18 @@ const server = http.createServer(async (req, res) => {
     
     const { text, description } = body;
     
+    // Gather other active tokens in session for context
+    const session = getSession(sId);
+    const otherTokens = Array.from(session.entries())
+      .filter(([id, data]) => id !== tId && data.status !== "archived")
+      .map(([id, data]) => ({
+        id,
+        title: data.title || data.text || "",
+        description: data.description || ""
+      }));
+
     // Asynchronous classification in the background
-    classifyAndSaveToken(sId, tId, text, description).catch(err => {
+    classifyAndSaveToken(sId, tId, text, description, otherTokens).catch(err => {
       console.error(`[Bridge] Background classification failed for token ${tId}:`, err);
     });
     
@@ -425,14 +453,20 @@ async function generateLiveInsight(sessionId, allTokens, clusters) {
   ).join("\n");
 
   const clustersText = clusters.length > 0 
-    ? clusters.map((c, idx) => 
-        `Cluster ${idx + 1} (Name: "${c[0].ai_metadata?.cluster_name || "Unknown"}") contains token IDs: ${c.map(t => t.id).join(", ")}`
-      ).join("\n")
+    ? clusters.map((c, idx) => {
+        const clusterName = c.find(t => t.ai_metadata?.cluster_name)?.ai_metadata?.cluster_name || "Algemeen";
+        const clusterIdeas = c.map(t => `- "${t.text}" (ID: ${t.id}, Description: "${t.description || "N/A"}")`).join("\n  ");
+        return `Cluster ${idx + 1} ("${clusterName}"):\n  ${clusterIdeas}`;
+      }).join("\n\n")
     : "No manual clusters on the table yet.";
 
   const systemPrompt = `You are the MOBUS live reflection engine. You observe the constellation of ideas on a creative brainstorming table.
-Your goal is to output a live insight or reflection prompt to be displayed on the Wall Screen. 
-It must be dynamic, directly context-aware, and speak in a supportive, inspiring way.
+Your goal is to output a live insight or reflection prompt to be displayed on the Wall Screen, focusing on the connections, tensions, or synergies between these ideas.
+
+Your role is to analyze the active ideas and manual clusters on the table, looking for:
+1. **Tension & Contrast**: Ideas or clusters with contrasting views (e.g., high-tech vs. nature, individual control vs. community participation, speed vs. safety). Point out the tension and ask a question to bridge them.
+2. **Synergy**: Ideas or clusters that complement each other and could be combined into a more powerful concept. Propose how they can reinforce each other.
+3. **Gaps**: Spot an area that feels missing between two clusters or ideas (e.g., "You have ideas about tech and ideas about ethics, but nothing on how users give feedback. What is missing in between?").
 
 Current Session Constellation:
 Active Ideas:
@@ -444,13 +478,13 @@ ${clustersText}
 Choose the most appropriate state and generate a response matching this schema:
 - state: one of:
   * "standby" (if no meaningful relationships or groups can be found)
-  * "suggestion" (if you see a potential relation between two unclustered ideas. E.g. "Beide ideeën lijken te gaan over schermgebruik. Wat wil je hierin verbeteren?")
+  * "suggestion" (if you see a potential relation, tension, synergy, or gap between two or more ideas. E.g. "Beide ideeën lijken te gaan over schermgebruik. Wat wil je hierin verbeteren?")
   * "reflection" (if a manual group has been formed and you want to ask a deep creative reflection question about it)
   * "summary" (if you want to summarize the core shared concept of a manual group)
 - title: A short Dutch title (e.g. theme or name of the connection, max 4 words)
 - message: The live insight text, question, or prompt in Dutch. Do NOT use static templates. Be organic, varied, and specific. Reflect on tension, contrasting views, opportunity, or underlying needs.
 - themeLabel: An optional short Dutch category label (e.g. "Technologie", "Samenwerking", "Duurzaamheid")
-- relatedIdeaIds: Array of token IDs involved in this suggestion or reflection.
+- relatedIdeaIds: Array of token IDs (from the list of active ideas) involved in this suggestion or reflection. You MUST include the exact IDs so that we can highlight them on the screen.
 - confidence: A number between 0.0 and 1.0.
 
 Provide strict JSON output matching this schema. All text fields must be in Dutch.`;

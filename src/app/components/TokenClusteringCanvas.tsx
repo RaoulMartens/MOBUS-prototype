@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useMemo, type MouseEvent as ReactMouseEven
 import { Token } from './Token';
 import { useTokens } from '../contexts/TokenContext';
 import { TableEmptyState } from './TableEmptyState';
+import { db } from '../../firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 interface CanvasToken {
   id: string;
@@ -203,6 +205,22 @@ export function TokenClusteringCanvas() {
   // Progressive Disclosure states
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [selectedRelationKey, setSelectedRelationKey] = useState<string | null>(null);
+  const [liveInsight, setLiveInsight] = useState<any>(null);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    const insightRef = doc(db, "sessions", sessionId, "state", "insight");
+    const unsubscribe = onSnapshot(insightRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setLiveInsight(snapshot.data());
+      } else {
+        setLiveInsight(null);
+      }
+    }, (err) => {
+      console.error("[Canvas] Failed to load live insight:", err);
+    });
+    return () => unsubscribe();
+  }, [sessionId]);
 
   useEffect(() => {
     document.title = "MOBUS - Tafelscherm";
@@ -1105,6 +1123,45 @@ export function TokenClusteringCanvas() {
             );
           })}
 
+          {/* AI Live Insight connection line */}
+          {liveInsight && liveInsight.state !== "standby" && liveInsight.relatedIdeaIds && liveInsight.relatedIdeaIds.length >= 2 && (() => {
+            const ids = liveInsight.relatedIdeaIds;
+            const linesToDraw = [];
+            for (let i = 0; i < ids.length - 1; i++) {
+              const token1 = canvasTokens.find(t => t.id === ids[i]);
+              const token2 = canvasTokens.find(t => t.id === ids[i+1]);
+              if (token1 && token2) {
+                linesToDraw.push({ token1, token2, key: `${ids[i]}-${ids[i+1]}` });
+              }
+            }
+            return linesToDraw.map(({ token1, token2, key }) => (
+              <g key={`ai-insight-line-${key}`} style={{ zIndex: 4 }}>
+                <line
+                  x1={token1.x}
+                  y1={token1.y}
+                  x2={token2.x}
+                  y2={token2.y}
+                  stroke="#fbbf24"
+                  strokeWidth="6"
+                  strokeLinecap="round"
+                  opacity="0.3"
+                  className="animate-pulse"
+                />
+                <line
+                  x1={token1.x}
+                  y1={token1.y}
+                  x2={token2.x}
+                  y2={token2.y}
+                  stroke="#f59e0b"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeDasharray="6,4"
+                  className="animate-dash"
+                />
+              </g>
+            ));
+          })()}
+
         </svg>
 
         {/* HTML Snap/Unsnap ripples */}
@@ -1185,6 +1242,7 @@ export function TokenClusteringCanvas() {
 
         {/* Tokens */}
         {canvasTokens.map((token) => {
+          const isHighlightedByAI = liveInsight && liveInsight.state !== 'standby' && liveInsight.relatedIdeaIds?.includes(token.id);
           return (
             <Token
               key={token.id}
@@ -1199,6 +1257,7 @@ export function TokenClusteringCanvas() {
               isConnected={connectedTokenIds.has(token.id)}
               isPulsing={false}
               isYellowSuggested={false}
+              isHighlightedByAI={isHighlightedByAI}
               allTokens={canvasTokens.map(t => ({ id: t.id, x: t.x, y: t.y }))}
               onMove={handleMove}
               onRotate={handleRotate}
@@ -1226,6 +1285,14 @@ export function TokenClusteringCanvas() {
 
       {/* CSS animations */}
       <style>{`
+        @keyframes dash {
+          to {
+            stroke-dashoffset: -20;
+          }
+        }
+        .animate-dash {
+          animation: dash 1s linear infinite;
+        }
         @keyframes pulse-slow {
           0%, 100% {
             opacity: 0.8;

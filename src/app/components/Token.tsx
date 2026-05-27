@@ -12,6 +12,7 @@ interface TokenProps {
   isConnected: boolean;
   isPulsing: boolean;
   isYellowSuggested?: boolean;
+  isHighlightedByAI?: boolean;
   allTokens: Array<{ id: string; x: number; y: number }>;
   onMove: (id: string, x: number, y: number) => void;
   onRotate: (id: string, rotation: number) => void;
@@ -59,6 +60,7 @@ export function Token({
   isConnected,
   isPulsing,
   isYellowSuggested = false,
+  isHighlightedByAI = false,
   onMove,
   onRotate,
   onRelease,
@@ -407,13 +409,15 @@ export function Token({
       <div className={justCreated ? "animate-token-spawn" : ""} style={{ transformOrigin: 'center' }}>
         <div
           className={`rounded-full flex flex-col items-center justify-center text-center p-2 border-2 ${
-            isYellowSuggested
-              ? 'bg-zinc-50 border-dashed border-zinc-600'
-              : isSelected
-                ? 'bg-zinc-300 border-zinc-950 text-zinc-950 font-black'
-                : isConnected
-                  ? 'bg-zinc-100 border-zinc-700'
-                  : 'bg-white border-zinc-400 hover:border-zinc-600'
+            isHighlightedByAI
+              ? 'bg-amber-50 border-amber-500 shadow-[0_0_15px_#f59e0b] animate-pulse'
+              : isYellowSuggested
+                ? 'bg-zinc-50 border-dashed border-zinc-600'
+                : isSelected
+                  ? 'bg-zinc-300 border-zinc-950 text-zinc-950 font-black'
+                  : isConnected
+                    ? 'bg-zinc-100 border-zinc-700'
+                    : 'bg-white border-zinc-400 hover:border-zinc-600'
           }`}
           style={{
             width: `${diameter}px`,

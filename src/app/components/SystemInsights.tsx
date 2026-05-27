@@ -531,17 +531,64 @@ export function SystemInsights() {
           {/* ── Left Column: Live AI Reflection ── */}
           <div style={styles.leftColumn}>
             {insight && insight.state !== "standby" ? (
-              <div style={styles.liveInsightCard} className="animate-fade-in">
-                <div style={styles.liveInsightHeader}>
-                  <span style={styles.liveInsightBadge}>
-                    ✨ {insight.state === "suggestion" ? "AI Suggestie" : insight.state === "reflection" ? "AI Reflectievraag" : "AI Samenvatting"}
-                  </span>
-                  {insight.themeLabel && (
-                    <span style={styles.liveInsightTheme}>{insight.themeLabel}</span>
-                  )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }} className="animate-fade-in">
+                <div style={styles.liveInsightCard}>
+                  <div style={styles.liveInsightHeader}>
+                    <span style={styles.liveInsightBadge}>
+                      ✨ {insight.state === "suggestion" ? "AI Suggestie" : insight.state === "reflection" ? "AI Reflectievraag" : "AI Samenvatting"}
+                    </span>
+                    {insight.themeLabel && (
+                      <span style={styles.liveInsightTheme}>{insight.themeLabel}</span>
+                    )}
+                  </div>
+                  <h3 style={styles.liveInsightTitle}>{insight.title}</h3>
+                  <p style={styles.liveInsightMessage}>{insight.message}</p>
                 </div>
-                <h3 style={styles.liveInsightTitle}>{insight.title}</h3>
-                <p style={styles.liveInsightMessage}>{insight.message}</p>
+
+                {/* Related Ideas Section */}
+                {insight.relatedIdeaIds && insight.relatedIdeaIds.length > 0 && (() => {
+                  const relatedTokens = tokens.filter(t => insight.relatedIdeaIds.includes(t.id));
+                  if (relatedTokens.length === 0) return null;
+                  return (
+                    <div style={{
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #d4d4d8',
+                      borderRadius: 4,
+                      padding: '1rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.75rem',
+                    }}>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Betrokken ideeën
+                      </div>
+                      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                        {relatedTokens.map((t) => (
+                          <div key={t.id} style={{
+                            flex: '1 1 180px',
+                            border: '1px solid #e4e4e7',
+                            borderRadius: 4,
+                            padding: '0.75rem',
+                            backgroundColor: '#fafafa',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.25rem',
+                          }}>
+                            {t.drawingDataUrl && (
+                              <img src={t.drawingDataUrl} alt="" style={{ height: 48, objectFit: 'contain', marginBottom: '0.25rem' }} />
+                            )}
+                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#09090b' }}>
+                              {t.ai_metadata?.title || t.text}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#71717a', lineHeight: '1.25' }}>
+                              {t.ai_metadata?.summary || t.description || 'Geen beschrijving'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             ) : (
               <div style={styles.liveInsightStandbyCard} className="animate-fade-in">
