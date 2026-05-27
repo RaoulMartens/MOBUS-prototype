@@ -231,7 +231,7 @@ Return a confidence score reflecting how clear the idea's intent is, but never b
 
 Provide strict JSON output matching this schema. All text fields (title, summary, interpretation, cluster_name, creative_intent) must be in Dutch:
 - title: Short Dutch title
-- summary: One sentence Dutch summary
+- summary: A very short Dutch summary (max 6-8 words)
 - interpretation: Broad Dutch interpretation of the idea's potential contribution to the session
 - category: one of "ruimte", "interactie", "samenwerking", "technologie", "creativiteit", "proces", "onbekend"
 - perspective: one of "UX", "technology", "business", "creativity", "unknown"

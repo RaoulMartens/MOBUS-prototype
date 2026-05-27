@@ -591,7 +591,7 @@ export function SystemInsights() {
                       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                         {relatedTokens.map((t) => (
                           <div key={t.id} style={{
-                            flex: '1 1 120px',
+                            flex: '1 1 140px',
                             border: '1px solid #e4e4e7',
                             borderRadius: 4,
                             padding: '0.75rem',
@@ -612,6 +612,9 @@ export function SystemInsights() {
                             )}
                             <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#09090b' }}>
                               {t.ai_metadata?.title || t.text}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#71717a', lineHeight: '1.25', marginTop: '0.1rem' }}>
+                              {t.ai_metadata?.summary || t.description || ''}
                             </div>
                           </div>
                         ))}
