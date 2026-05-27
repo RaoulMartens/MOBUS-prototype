@@ -554,7 +554,7 @@ export function SystemInsights() {
             
             {/* Join card with QR code */}
             <div style={{
-              marginTop: 'auto',
+              marginTop: '1.25rem',
               backgroundColor: '#ffffff',
               border: '1px solid #a1a1aa',
               borderRadius: 4,
