@@ -8,6 +8,7 @@ import { Landing } from './components/Landing';
 import { PhoneApp } from './components/PhoneApp';
 import { ExperienceInfo } from './components/ExperienceInfo';
 import { DebugView } from './components/DebugView';
+import { StatsView } from './components/StatsView';
 
 const createSessionId = () => `mobus-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -65,6 +66,8 @@ export default function App() {
             <Route path="/phone/admin" element={<PhoneApp />} />
             <Route path="/phone/session" element={<PhoneApp />} />
             <Route path="/dev/debug" element={<DebugView />} />
+            <Route path="/dev/stats" element={<StatsView />} />
+            <Route path="/stats" element={<StatsView />} />
           </Routes>
         </div>
       </TokenProvider>

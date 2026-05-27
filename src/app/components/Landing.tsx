@@ -47,6 +47,7 @@ export function Landing({ onEnter }: LandingProps) {
   const phoneUrl = `${window.location.origin}/phone?sessionId=${sessionId}`;
   const tableUrl = `/table?sessionId=${sessionId}`;
   const overviewUrl = `/dev/wall?sessionId=${sessionId}`;
+  const statsUrl = `/dev/stats?sessionId=${sessionId}`;
 
   const handleCodeChange = (val: string) => {
     const clean = val.replace(/\D/g, '').slice(0, 4);
@@ -217,6 +218,15 @@ export function Landing({ onEnter }: LandingProps) {
                   className="inline-flex items-center gap-1.5 text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50 transition-colors"
                 >
                   Open muurscherm los
+                  <ExternalLink size={13} />
+                </a>
+                <a
+                  href={statsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-50 transition-colors"
+                >
+                  Open statistiekenscherm los
                   <ExternalLink size={13} />
                 </a>
                 <button
