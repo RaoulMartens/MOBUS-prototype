@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTokens } from '../contexts/TokenContext';
-import { Sprout, Users, Smartphone, Clover, Clock, ArrowLeft } from 'lucide-react';
+import { Sprout, Users, Smartphone, Clover, Clock, ArrowLeft, RotateCw } from 'lucide-react';
 import { useNavigate } from 'react-router';
 
 function formatTimeAgo(timestamp: string): string {
@@ -54,6 +54,79 @@ function StatsViewInner() {
   const sessionId = context?.sessionId || "";
 
   const [timeState, setTimeState] = useState(Date.now());
+
+  // Rotation state: 0, 90, 180, 270
+  const [rotation, setRotation] = useState<number>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const rParam = params.get('rotate');
+    if (rParam === '90') return 90;
+    if (rParam === '270' || rParam === '-90') return 270;
+    if (rParam === '180') return 180;
+    
+    const stored = localStorage.getItem('stats_rotation');
+    if (stored === '90') return 90;
+    if (stored === '270') return 270;
+    if (stored === '180') return 180;
+    
+    return 0;
+  });
+
+  useEffect(() => {
+    if (rotation === 0) {
+      localStorage.removeItem('stats_rotation');
+    } else {
+      localStorage.setItem('stats_rotation', String(rotation));
+    }
+  }, [rotation]);
+
+  const cycleRotation = () => {
+    setRotation(prev => {
+      if (prev === 0) return 90;
+      if (prev === 90) return 180;
+      if (prev === 180) return 270;
+      return 0;
+    });
+  };
+
+  const getContainerStyle = (): React.CSSProperties => {
+    if (rotation === 90) {
+      return {
+        transform: 'rotate(90deg)',
+        width: '100vh',
+        height: '100vw',
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transformOrigin: 'center',
+        translate: '-50% -50%',
+      };
+    }
+    if (rotation === 270) {
+      return {
+        transform: 'rotate(270deg)',
+        width: '100vh',
+        height: '100vw',
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transformOrigin: 'center',
+        translate: '-50% -50%',
+      };
+    }
+    if (rotation === 180) {
+      return {
+        transform: 'rotate(180deg)',
+        width: '100vw',
+        height: '100vh',
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transformOrigin: 'center',
+        translate: '-50% -50%',
+      };
+    }
+    return {};
+  };
 
   useEffect(() => {
     document.title = "MOBUS - Statistieken";
@@ -135,8 +208,13 @@ function StatsViewInner() {
 
   const displaySessionCode = sessionId ? sessionId.replace(/^mobus-/, '') : 'tafel-88';
 
-  return (
-    <div className="w-full min-h-screen bg-background text-foreground font-sans p-6 md:p-8 flex flex-col items-center select-none overflow-auto">
+  const hasRotation = rotation !== 0;
+
+  const content = (
+    <div 
+      className={`bg-background text-foreground font-sans p-6 md:p-8 flex flex-col items-center select-none ${hasRotation ? 'w-full h-full overflow-auto' : 'w-full min-h-screen overflow-auto'}`}
+      style={getContainerStyle()}
+    >
       {/* Subtle back navigation helper for devs/setup */}
       <div className="w-full max-w-md flex justify-between items-center mb-6 opacity-60 hover:opacity-100 transition-opacity">
         <button
@@ -261,5 +339,33 @@ function StatsViewInner() {
 
       </div>
     </div>
+  );
+
+  if (hasRotation) {
+    return (
+      <div className="w-screen h-screen overflow-hidden bg-background relative">
+        {content}
+        <button
+          onClick={cycleRotation}
+          className="absolute bottom-6 right-6 p-3 rounded-full bg-secondary/80 hover:bg-secondary text-secondary-foreground border border-border shadow-lg backdrop-blur-xs transition-transform hover:scale-105 active:scale-95 cursor-pointer z-50 flex items-center justify-center"
+          title="Draai scherm"
+        >
+          <RotateCw size={18} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {content}
+      <button
+        onClick={cycleRotation}
+        className="fixed bottom-6 right-6 p-3 rounded-full bg-secondary/80 hover:bg-secondary text-secondary-foreground border border-border shadow-lg backdrop-blur-xs transition-transform hover:scale-105 active:scale-95 cursor-pointer z-50 flex items-center justify-center"
+        title="Draai scherm"
+      >
+        <RotateCw size={18} />
+      </button>
+    </>
   );
 }
