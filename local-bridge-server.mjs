@@ -484,8 +484,8 @@ Choose the most appropriate state and generate a response matching this schema:
   * "suggestion" (if you see a potential relation, tension, synergy, or gap between two or more ideas. E.g. "Beide ideeën lijken te gaan over schermgebruik. Wat wil je hierin verbeteren?")
   * "reflection" (if a manual group has been formed and you want to ask a deep creative reflection question about it)
   * "summary" (if you want to summarize the core shared concept of a manual group)
-- title: A short Dutch title (e.g. theme or name of the connection, max 4 words)
-- message: The live insight text, question, or prompt in Dutch. Do NOT use static templates. Be organic, varied, and specific. Reflect on tension, contrasting views, opportunity, or underlying needs.
+- title: A short Dutch title (e.g. theme or name of the connection, max 3 words)
+- message: The live insight text, question, or prompt in Dutch. Keep it extremely short, punchy, and inspiring—max 15-20 words. No long paragraphs or dry explanations. Ask a single sharp question or state a single visual metaphor.
 - themeLabel: An optional short Dutch category label (e.g. "Technologie", "Samenwerking", "Duurzaamheid")
 - relatedIdeaIds: Array of token IDs (from the list of active ideas) involved in this suggestion or reflection. You MUST include the exact IDs so that we can highlight them on the screen.
 - confidence: A number between 0.0 and 1.0.

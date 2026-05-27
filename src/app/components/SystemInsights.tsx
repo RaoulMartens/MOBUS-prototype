@@ -562,26 +562,30 @@ export function SystemInsights() {
                       <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         Betrokken ideeën
                       </div>
-                      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                         {relatedTokens.map((t) => (
                           <div key={t.id} style={{
-                            flex: '1 1 180px',
+                            flex: '1 1 120px',
                             border: '1px solid #e4e4e7',
                             borderRadius: 4,
                             padding: '0.75rem',
                             backgroundColor: '#fafafa',
                             display: 'flex',
                             flexDirection: 'column',
+                            alignItems: 'center',
+                            textAlign: 'center',
+                            justifyContent: 'center',
                             gap: '0.25rem',
                           }}>
-                            {t.drawingDataUrl && (
-                              <img src={t.drawingDataUrl} alt="" style={{ height: 48, objectFit: 'contain', marginBottom: '0.25rem' }} />
+                            {t.drawingDataUrl ? (
+                              <img src={t.drawingDataUrl} alt="" style={{ height: 72, width: '100%', objectFit: 'contain', marginBottom: '0.25rem' }} />
+                            ) : (
+                              <div style={{ height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', color: '#a1a1aa' }}>
+                                📝
+                              </div>
                             )}
-                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#09090b' }}>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#09090b' }}>
                               {t.ai_metadata?.title || t.text}
-                            </div>
-                            <div style={{ fontSize: '0.75rem', color: '#71717a', lineHeight: '1.25' }}>
-                              {t.ai_metadata?.summary || t.description || 'Geen beschrijving'}
                             </div>
                           </div>
                         ))}
@@ -802,12 +806,14 @@ const styles: Record<string, React.CSSProperties> = {
   },
   // Cards
   cardGrid: {
-    display: 'flex',
-    flexDirection: 'row' as const,
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+    gridAutoRows: 'max-content',
     gap: '1rem',
-    overflow: 'hidden',
+    overflowY: 'auto',
     flex: 1,
     minHeight: 0,
+    paddingRight: '0.5rem',
   },
   card: {
     backgroundColor: '#ffffff',
@@ -816,10 +822,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '1rem 1.25rem',
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.5rem',
-    flex: '1 1 200px',
-    maxWidth: '300px',
-    maxHeight: '100%',
+    gap: '0.75rem',
     boxSizing: 'border-box',
   },
   cardHeader: {
@@ -829,7 +832,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
   cardLabel: {
-    fontSize: '1.1rem',
+    fontSize: '1.05rem',
     fontWeight: 700,
     color: '#09090b',
   },
@@ -847,24 +850,21 @@ const styles: Record<string, React.CSSProperties> = {
   // Chips
   chipRow: {
     display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.5rem',
-    overflowY: 'auto',
-    flex: 1,
-    minHeight: 0,
-    paddingRight: '0.25rem',
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap',
+    gap: '0.4rem',
   },
   chip: {
-    fontSize: '0.825rem',
-    fontWeight: 500,
+    fontSize: '0.8rem',
+    fontWeight: 600,
     color: '#27272a',
     backgroundColor: '#f4f4f5',
     border: '1px solid #d4d4d8',
     borderRadius: 4,
-    padding: '0.3rem 0.65rem',
+    padding: '0.25rem 0.5rem',
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '0.4rem',
+    gap: '0.35rem',
   },
   // Suggestion
   suggestion: {
