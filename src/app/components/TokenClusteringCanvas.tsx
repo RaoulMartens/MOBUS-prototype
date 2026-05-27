@@ -1311,26 +1311,6 @@ export function TokenClusteringCanvas() {
                   </p>
                 )}
               </div>
-
-              {selectedToken.ai_metadata && (
-                <div className="border-t border-zinc-100 pt-2 flex flex-col gap-1">
-                  <span className="text-[8px] uppercase font-bold tracking-wider text-emerald-600">
-                    AI Analyse
-                  </span>
-                  <p className="text-[10px] text-zinc-500 italic leading-snug">
-                    {selectedToken.ai_metadata.interpretation}
-                  </p>
-                  {selectedToken.ai_metadata.tags && selectedToken.ai_metadata.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {selectedToken.ai_metadata.tags.map((tag: string, i: number) => (
-                        <span key={i} className="px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 text-[8px] font-bold">
-                          #{tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           );
         })()}
