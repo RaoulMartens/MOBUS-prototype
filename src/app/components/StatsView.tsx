@@ -99,17 +99,17 @@ function StatsViewInner() {
   const displaySessionCode = sessionId ? sessionId.replace(/^mobus-/, '') : 'tafel-88';
 
   return (
-    <div className="w-full min-h-screen bg-zinc-950 text-zinc-50 font-sans p-6 md:p-8 flex flex-col items-center select-none overflow-auto">
+    <div className="w-full min-h-screen bg-background text-foreground font-sans p-6 md:p-8 flex flex-col items-center select-none overflow-auto">
       {/* Subtle back navigation helper for devs/setup */}
-      <div className="w-full max-w-md flex justify-between items-center mb-6 opacity-40 hover:opacity-100 transition-opacity">
+      <div className="w-full max-w-md flex justify-between items-center mb-6 opacity-60 hover:opacity-100 transition-opacity">
         <button
           onClick={() => navigate('/')}
-          className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white cursor-pointer"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer font-bold"
         >
           <ArrowLeft size={14} />
           Dashboard
         </button>
-        <span className="text-[10px] font-mono text-zinc-400">
+        <span className="text-[10px] font-mono text-muted-foreground font-bold">
           Sessie: {displaySessionCode}
         </span>
       </div>
@@ -118,22 +118,22 @@ function StatsViewInner() {
         
         {/* Recente activiteiten */}
         <section className="flex flex-col gap-4">
-          <h2 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-100">
+          <h2 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
             Recente activiteiten
           </h2>
           
-          <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-5 flex flex-col divide-y divide-zinc-800/60">
+          <div className="bg-card border border-border rounded-xl p-5 flex flex-col divide-y divide-border">
             {events.length === 0 ? (
-              <div className="text-center py-8 text-sm text-zinc-500">
+              <div className="text-center py-8 text-sm text-muted-foreground">
                 Nog geen activiteiten in deze sessie
               </div>
             ) : (
               events.slice(0, 4).map((event: any, idx: number) => (
                 <div key={event.id || idx} className="py-3.5 first:pt-0 last:pb-0 flex flex-col gap-1">
-                  <span className="text-sm font-medium text-zinc-200">
+                  <span className="text-sm font-medium text-foreground">
                     {getEventDescription(event)}
                   </span>
-                  <span className="text-xs text-emerald-400 font-medium">
+                  <span className="text-xs text-[#22c55e] font-semibold">
                     {getEventTimeLabel(event.timestamp)}
                   </span>
                 </div>
@@ -141,79 +141,79 @@ function StatsViewInner() {
             )}
           </div>
 
-          <button className="self-start inline-flex items-center gap-2 px-4 py-2.5 rounded bg-zinc-900 border border-zinc-800/80 text-xs font-bold text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors cursor-pointer">
-            <Clock size={14} className="text-emerald-400" />
+          <button className="self-start inline-flex items-center gap-2 px-4 py-2.5 rounded bg-secondary text-secondary-foreground border border-border text-xs font-bold hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer">
+            <Clock size={14} className="text-[#22c55e]" />
             Bekijk alle activiteiten
           </button>
         </section>
 
         {/* Overzicht */}
         <section className="flex flex-col gap-4">
-          <h2 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-100">
+          <h2 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
             Overzicht
           </h2>
 
           <div className="grid grid-cols-2 gap-4">
             
             {/* Totaal aantal ideeën */}
-            <div className="bg-zinc-900/40 border border-emerald-950/40 rounded-xl p-5 flex flex-col gap-4 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
-              <div className="w-10 h-10 rounded-lg bg-emerald-950/30 border border-emerald-800/20 flex items-center justify-center text-emerald-400">
+            <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-[#22c55e]/5 rounded-full blur-xl pointer-events-none" />
+              <div className="w-10 h-10 rounded-lg bg-[#22c55e]/10 border border-[#22c55e]/20 flex items-center justify-center text-[#22c55e]">
                 <Sprout size={20} />
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className="text-xs text-zinc-400 font-semibold leading-snug">
+                <span className="text-xs text-muted-foreground font-semibold leading-snug">
                   Totaal aantal ideeën
                 </span>
-                <span className="text-4xl font-extrabold text-zinc-100 tracking-tight">
+                <span className="text-4xl font-extrabold text-foreground tracking-tight">
                   {totalIdeas}
                 </span>
               </div>
             </div>
 
             {/* Aantal clusters */}
-            <div className="bg-zinc-900/40 border border-blue-950/40 rounded-xl p-5 flex flex-col gap-4 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full blur-xl pointer-events-none" />
-              <div className="w-10 h-10 rounded-lg bg-blue-950/30 border border-blue-800/20 flex items-center justify-center text-blue-400">
+            <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-[#3b82f6]/5 rounded-full blur-xl pointer-events-none" />
+              <div className="w-10 h-10 rounded-lg bg-[#3b82f6]/10 border border-[#3b82f6]/20 flex items-center justify-center text-[#3b82f6]">
                 <Users size={20} />
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className="text-xs text-zinc-400 font-semibold leading-snug">
+                <span className="text-xs text-muted-foreground font-semibold leading-snug">
                   Aantal clusters
                 </span>
-                <span className="text-4xl font-extrabold text-zinc-100 tracking-tight">
+                <span className="text-4xl font-extrabold text-foreground tracking-tight">
                   {totalClusters}
                 </span>
               </div>
             </div>
 
             {/* Input mobus gebruikt */}
-            <div className="bg-zinc-900/40 border border-yellow-950/40 rounded-xl p-5 flex flex-col gap-4 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-500/5 rounded-full blur-xl pointer-events-none" />
-              <div className="w-10 h-10 rounded-lg bg-yellow-950/30 border border-yellow-800/20 flex items-center justify-center text-yellow-400">
+            <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-[#eab308]/5 rounded-full blur-xl pointer-events-none" />
+              <div className="w-10 h-10 rounded-lg bg-[#eab308]/10 border border-[#eab308]/20 flex items-center justify-center text-[#eab308]">
                 <Bus size={20} />
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className="text-xs text-zinc-400 font-semibold leading-snug">
+                <span className="text-xs text-muted-foreground font-semibold leading-snug">
                   Input mobus gebruikt
                 </span>
-                <span className="text-4xl font-extrabold text-zinc-100 tracking-tight">
+                <span className="text-4xl font-extrabold text-foreground tracking-tight">
                   {mobusInputs}
                 </span>
               </div>
             </div>
 
             {/* Aantal losstaande ideeën */}
-            <div className="bg-zinc-900/40 border border-pink-950/40 rounded-xl p-5 flex flex-col gap-4 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-pink-500/5 rounded-full blur-xl pointer-events-none" />
-              <div className="w-10 h-10 rounded-lg bg-pink-950/30 border border-pink-800/20 flex items-center justify-center text-pink-400">
+            <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-[#ec4899]/5 rounded-full blur-xl pointer-events-none" />
+              <div className="w-10 h-10 rounded-lg bg-[#ec4899]/10 border border-[#ec4899]/20 flex items-center justify-center text-[#ec4899]">
                 <Clover size={20} />
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className="text-xs text-zinc-400 font-semibold leading-snug">
+                <span className="text-xs text-muted-foreground font-semibold leading-snug">
                   Aantal losstaande ideeën
                 </span>
-                <span className="text-4xl font-extrabold text-zinc-100 tracking-tight">
+                <span className="text-4xl font-extrabold text-foreground tracking-tight">
                   {standaloneIdeas}
                 </span>
               </div>
