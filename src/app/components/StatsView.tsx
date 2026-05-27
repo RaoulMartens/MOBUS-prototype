@@ -4,50 +4,81 @@ import { Sprout, Users, Bus, Clover, Clock, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router';
 
 function formatTimeAgo(timestamp: string): string {
-  const diffMs = Date.now() - new Date(timestamp).getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return "Zojuist";
-  if (diffMins === 1) return "1 minuut geleden";
-  if (diffMins < 60) return `${diffMins} minuten geleden`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours === 1) return "1 uur geleden";
-  if (diffHours < 24) return `${diffHours} uur geleden`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays === 1) return "1 dag geleden";
-  return `${diffDays} dagen geleden`;
+  try {
+    if (!timestamp) return "Zojuist";
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return "Zojuist";
+    const diffMs = Date.now() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "Zojuist";
+    if (diffMins === 1) return "1 minuut geleden";
+    if (diffMins < 60) return `${diffMins} minuten geleden`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours === 1) return "1 uur geleden";
+    if (diffHours < 24) return `${diffHours} uur geleden`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return "1 dag geleden";
+    return `${diffDays} dagen geleden`;
+  } catch (e) {
+    return "Zojuist";
+  }
 }
 
 export function StatsView() {
+  try {
+    return <StatsViewInner />;
+  } catch (error: any) {
+    return (
+      <div className="p-8 bg-zinc-950 text-red-500 font-mono min-h-screen">
+        <h1 className="text-xl font-bold mb-4">Rendering Error in StatsView:</h1>
+        <pre className="bg-zinc-900 p-4 border border-zinc-800 rounded">{error?.stack || error?.message || String(error)}</pre>
+      </div>
+    );
+  }
+}
+
+function StatsViewInner() {
   const navigate = useNavigate();
-  const { tokens, clusters, events, sessionId } = useTokens();
+  
+  // Safe context extraction
+  let context: any;
+  try {
+    context = useTokens();
+  } catch (e) {
+    context = null;
+  }
+
+  const tokens = context?.tokens || [];
+  const clusters = context?.clusters || [];
+  const events = context?.events || [];
+  const sessionId = context?.sessionId || "";
+
   const [timeState, setTimeState] = useState(Date.now());
 
   useEffect(() => {
     document.title = "MOBUS - Statistieken";
     const interval = setInterval(() => {
       setTimeState(Date.now());
-    }, 30000); // refresh time ago every 30s
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  // Calculate statistics
+  // Calculate statistics safely
   const totalIdeas = tokens.length;
   const totalClusters = clusters.length;
   
   // Input mobus (table scanner / simulation)
-  const mobusInputs = tokens.filter(t => 
-    t.source === 'table' || 
-    t.source === 'simulation' || 
-    !t.source // fallback to table
+  const mobusInputs = tokens.filter((t: any) => 
+    t && (t.source === 'table' || t.source === 'simulation' || !t.source)
   ).length;
 
   // Unclustered ideas
-  const standaloneIdeas = tokens.filter(t => !t.clusterId).length;
+  const standaloneIdeas = tokens.filter((t: any) => t && !t.clusterId).length;
 
   // Clean event message for Dutch presentation
   const getEventDescription = (event: any) => {
+    if (!event) return "";
     const msg = event.message || "";
-    // If it starts with standard English created message, translate it nicely
     if (msg.startsWith("New token \"") && msg.endsWith("\" created")) {
       const tokenName = msg.substring(11, msg.length - 10);
       return `Idee '${tokenName}' geplaatst`;
@@ -61,10 +92,11 @@ export function StatsView() {
   };
 
   const getEventTimeLabel = (timestamp: string) => {
-    // Keep it reactive to timeState
     const dummy = timeState;
     return formatTimeAgo(timestamp);
   };
+
+  const displaySessionCode = sessionId ? sessionId.replace(/^mobus-/, '') : 'tafel-88';
 
   return (
     <div className="w-full min-h-screen bg-zinc-950 text-zinc-50 font-sans p-6 md:p-8 flex flex-col items-center select-none overflow-auto">
@@ -78,7 +110,7 @@ export function StatsView() {
           Dashboard
         </button>
         <span className="text-[10px] font-mono text-zinc-400">
-          Sessie: {sessionId.replace(/^mobus-/, '')}
+          Sessie: {displaySessionCode}
         </span>
       </div>
 
@@ -96,7 +128,7 @@ export function StatsView() {
                 Nog geen activiteiten in deze sessie
               </div>
             ) : (
-              events.slice(0, 4).map((event, idx) => (
+              events.slice(0, 4).map((event: any, idx: number) => (
                 <div key={event.id || idx} className="py-3.5 first:pt-0 last:pb-0 flex flex-col gap-1">
                   <span className="text-sm font-medium text-zinc-200">
                     {getEventDescription(event)}
