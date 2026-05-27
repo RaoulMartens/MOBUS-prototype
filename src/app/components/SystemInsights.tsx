@@ -510,38 +510,22 @@ export function SystemInsights() {
             </div>
 
             <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
-              {/* Small compact QR code for joining */}
+              {/* QR code only, larger size */}
               <div style={{
                 backgroundColor: '#ffffff',
                 border: '1px solid #d4d4d8',
                 borderRadius: 4,
-                padding: '0.4rem 0.6rem',
+                padding: '0.45rem',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '0.6rem',
+                justifyContent: 'center',
               }}>
-                <div style={{
-                  padding: '0.15rem',
-                  backgroundColor: '#ffffff',
-                  borderRadius: 2,
-                  border: '1px solid #e4e4e7',
-                  display: 'inline-flex',
-                }}>
-                  <QRCodeSVG
-                    value={getNetworkPhoneUrl(sessionId)}
-                    size={36}
-                    bgColor="#ffffff"
-                    fgColor="#09090b"
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.05rem' }}>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#09090b' }}>
-                    Doe mee!
-                  </span>
-                  <span style={{ fontSize: '0.625rem', fontFamily: 'monospace', color: '#71717a' }}>
-                    Code: <strong style={{ color: '#09090b', fontWeight: 700 }}>{sessionId.replace(/^mobus-/, '')}</strong>
-                  </span>
-                </div>
+                <QRCodeSVG
+                  value={getNetworkPhoneUrl(sessionId)}
+                  size={64}
+                  bgColor="#ffffff"
+                  fgColor="#09090b"
+                />
               </div>
 
               <div style={{
