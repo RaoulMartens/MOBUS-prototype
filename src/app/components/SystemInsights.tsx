@@ -670,34 +670,21 @@ export function SystemInsights() {
                         {card.ideas.map((idea, cIdx) => {
                           const originalToken = tokens.find(t => t.text === idea.text || t.ai_metadata?.title === idea.text);
                           return (
-                            <span key={cIdx} style={{
-                              ...styles.chip,
-                              flexDirection: 'column',
-                              alignItems: 'flex-start',
-                              gap: '0.25rem',
-                              padding: '0.5rem 0.75rem'
-                            }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                {idea.drawingDataUrl && (
-                                  <img
-                                    src={idea.drawingDataUrl}
-                                    alt=""
-                                    style={{
-                                      width: '32px',
-                                      height: '24px',
-                                      objectFit: 'contain',
-                                      backgroundColor: 'transparent',
-                                      borderRadius: '2px',
-                                    }}
-                                  />
-                                )}
-                                <span style={{ fontWeight: 600 }}>{originalToken?.ai_metadata?.title || idea.text}</span>
-                              </div>
-                              {originalToken?.ai_metadata?.summary && (
-                                <p style={{ margin: 0, fontSize: '0.75rem', color: '#52525b', maxWidth: '280px', lineHeight: '1.3' }}>
-                                  {originalToken.ai_metadata.summary}
-                                </p>
+                            <span key={cIdx} style={styles.chip}>
+                              {idea.drawingDataUrl && (
+                                <img
+                                  src={idea.drawingDataUrl}
+                                  alt=""
+                                  style={{
+                                    width: '32px',
+                                    height: '24px',
+                                    objectFit: 'contain',
+                                    backgroundColor: 'transparent',
+                                    borderRadius: '2px',
+                                  }}
+                                />
                               )}
+                              <span style={{ fontWeight: 600 }}>{originalToken?.ai_metadata?.title || idea.text}</span>
                             </span>
                           );
                         })}
@@ -822,23 +809,21 @@ const styles: Record<string, React.CSSProperties> = {
   cardGrid: {
     display: 'flex',
     flexDirection: 'row' as const,
-    gap: '1.25rem',
-    overflowX: 'auto',
-    overflowY: 'hidden',
+    gap: '1rem',
+    overflow: 'hidden',
     flex: 1,
     minHeight: 0,
-    paddingBottom: '0.75rem',
   },
   card: {
     backgroundColor: '#ffffff',
     border: '1px solid #a1a1aa',
     borderRadius: 4,
-    padding: '1.25rem 1.5rem',
+    padding: '1rem 1.25rem',
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.75rem',
-    width: '340px',
-    flexShrink: 0,
+    gap: '0.5rem',
+    flex: '1 1 200px',
+    maxWidth: '300px',
     maxHeight: '100%',
     boxSizing: 'border-box',
   },
