@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTokens } from '../contexts/TokenContext';
-import { Sprout, Users, Bus, Clover, Clock, ArrowLeft } from 'lucide-react';
+import { Sprout, Users, Smartphone, Clover, Clock, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router';
 
 function formatTimeAgo(timestamp: string): string {
@@ -63,17 +63,54 @@ function StatsViewInner() {
     return () => clearInterval(interval);
   }, []);
 
-  // Calculate statistics safely
-  const totalIdeas = tokens.length;
-  const totalClusters = clusters.length;
-  
-  // Input mobus (table scanner / simulation)
-  const mobusInputs = tokens.filter((t: any) => 
-    t && (t.source === 'table' || t.source === 'simulation' || !t.source)
-  ).length;
+  // Calculate spatial clusters (distance < 140) and standalone ideas dynamically
+  const SNAP_DISTANCE = 140;
+  const visited = new Set<string>();
+  let proximityClustersCount = 0;
+  let standaloneIdeasCount = 0;
 
-  // Unclustered ideas
-  const standaloneIdeas = tokens.filter((t: any) => t && !t.clusterId).length;
+  for (const token of tokens) {
+    if (!token || !token.id) continue;
+    if (visited.has(token.id)) continue;
+
+    const component: any[] = [];
+    const queue = [token];
+    visited.add(token.id);
+
+    while (queue.length > 0) {
+      const curr = queue.shift()!;
+      component.push(curr);
+
+      for (const other of tokens) {
+        if (!other || !other.id || visited.has(other.id)) continue;
+        
+        const dist = Math.sqrt(
+          Math.pow((curr.position?.x || 0) - (other.position?.x || 0), 2) +
+          Math.pow((curr.position?.y || 0) - (other.position?.y || 0), 2)
+        );
+
+        if (dist < SNAP_DISTANCE) {
+          visited.add(other.id);
+          queue.push(other);
+        }
+      }
+    }
+
+    if (component.length >= 2) {
+      proximityClustersCount++;
+    } else {
+      standaloneIdeasCount++;
+    }
+  }
+
+  const totalIdeas = tokens.length;
+  const totalClusters = proximityClustersCount;
+  const standaloneIdeas = standaloneIdeasCount;
+
+  // Phone inputs
+  const phoneInputs = tokens.filter((t: any) => 
+    t && (t.source === 'phone' || t.source === 'admin')
+  ).length;
 
   // Clean event message for Dutch presentation
   const getEventDescription = (event: any) => {
@@ -187,18 +224,18 @@ function StatsViewInner() {
               </div>
             </div>
 
-            {/* Input mobus gebruikt */}
+            {/* Ingevoerd via telefoon */}
             <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4 relative overflow-hidden group">
               <div className="absolute top-0 right-0 w-24 h-24 bg-[#eab308]/5 rounded-full blur-xl pointer-events-none" />
               <div className="w-10 h-10 rounded-lg bg-[#eab308]/10 border border-[#eab308]/20 flex items-center justify-center text-[#eab308]">
-                <Bus size={20} />
+                <Smartphone size={20} />
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="text-xs text-muted-foreground font-semibold leading-snug">
-                  Input mobus gebruikt
+                  Ingevoerd via telefoon
                 </span>
                 <span className="text-4xl font-extrabold text-foreground tracking-tight">
-                  {mobusInputs}
+                  {phoneInputs}
                 </span>
               </div>
             </div>
