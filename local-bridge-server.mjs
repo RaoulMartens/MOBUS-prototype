@@ -495,6 +495,7 @@ Provide strict JSON output matching this schema. All text fields must be in Dutc
     if (!generatedText) throw new Error("Empty response");
 
     const insight = JSON.parse(generatedText);
+    console.log(`[Bridge] Generated Live Insight for session ${sessionId}:`, JSON.stringify(insight, null, 2));
     await writeLiveInsightToFirestore(sessionId, insight);
   } catch (err) {
     console.error(`[Bridge] Live insight generation failed for session ${sessionId}:`, err);
