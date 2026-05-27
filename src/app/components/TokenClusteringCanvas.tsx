@@ -1276,10 +1276,64 @@ export function TokenClusteringCanvas() {
           );
         })}
 
+        {/* Selected Token Details Card */}
+        {selectedTokenId && (() => {
+          const selectedToken = canvasTokens.find(t => t.id === selectedTokenId);
+          if (!selectedToken) return null;
+          return (
+            <div 
+              className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[1100] bg-white/95 border border-zinc-200 shadow-xl rounded-xl p-5 w-[380px] max-w-[calc(100vw-2rem)] flex flex-col gap-3 animate-fade-in pointer-events-auto select-none"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-start">
+                <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-400">
+                  Idee Details
+                </span>
+                <button 
+                  onClick={() => setSelectedTokenId(null)}
+                  className="text-zinc-400 hover:text-zinc-950 font-bold text-xs p-1 cursor-pointer"
+                >
+                  sluiten
+                </button>
+              </div>
+              
+              <div className="flex flex-col gap-1">
+                <h3 className="text-sm font-bold text-zinc-950 leading-tight">
+                  {selectedToken.label}
+                </h3>
+                {selectedToken.description ? (
+                  <p className="text-xs text-zinc-600 leading-normal font-medium">
+                    {selectedToken.description}
+                  </p>
+                ) : (
+                  <p className="text-xs text-zinc-400 italic">
+                    Geen beschrijving ingevoerd via telefoon.
+                  </p>
+                )}
+              </div>
 
-
-
-
+              {selectedToken.ai_metadata && (
+                <div className="border-t border-zinc-100 pt-2 flex flex-col gap-1">
+                  <span className="text-[8px] uppercase font-bold tracking-wider text-emerald-600">
+                    AI Analyse
+                  </span>
+                  <p className="text-[10px] text-zinc-500 italic leading-snug">
+                    {selectedToken.ai_metadata.interpretation}
+                  </p>
+                  {selectedToken.ai_metadata.tags && selectedToken.ai_metadata.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {selectedToken.ai_metadata.tags.map((tag: string, i: number) => (
+                        <span key={i} className="px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 text-[8px] font-bold">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
       </div>
 
