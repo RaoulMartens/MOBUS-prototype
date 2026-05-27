@@ -36,6 +36,7 @@ export interface Token {
     creative_intent: string;
     possible_connections: string[];
   } | null;
+  source?: string | null;
 }
 
 export interface Cluster {
@@ -118,6 +119,7 @@ const normalizeToken = (id: string, data: any): Token | null => {
     createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || new Date().toISOString(),
     status: data.status || "active",
     ai_metadata: data.ai_metadata || null,
+    source: data.source || null,
   };
 };
 
